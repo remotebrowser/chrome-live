@@ -40,7 +40,12 @@ for i in {1..5}; do
     echo "Proxy check: attempt $i failed, retrying in 2 seconds..."
 done
 
+echo "Starting Google Chrome..."
+mkdir -p $HOME/chrome-profile
+google-chrome --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --remote-debugging-address=0.0.0.0 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --user-data-dir=$HOME/chrome-profile --proxy-server="http://127.0.0.1:8080" google.com &
+
 google-chrome --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --remote-debugging-address=0.0.0.0 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --proxy-server="http://127.0.0.1:8080" google.com &
+
 socat TCP-LISTEN:9222,fork,reuseaddr TCP:127.0.0.1:9221 &
 
 echo "VNC server started on port 5900"

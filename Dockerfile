@@ -67,4 +67,6 @@ RUN useradd -m -s /bin/bash user && \
 
 USER user
 
+RUN mkdir -p $HOME/chrome-profile
+
 ENTRYPOINT ["/app/entrypoint.sh"]
