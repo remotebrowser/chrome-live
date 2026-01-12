@@ -19,11 +19,7 @@ To enable remote control of Chrome via the [Chrome DevTools Protocol](https://ch
 podman run --name chrome-live -p 7000:80 -p 9222:9222 ghcr.io/remotebrowser/chrome-live
 ```
 
-To configure Chrome's proxy connection (via [GOST](https://gost.run/en)):
-```
-podman exec chrome-live bash -c "sudo pkill gost"
-podman exec chrome-live bash -c "screen -dmS gost /app/gost -L http://:8080 -F http://username:password@proxy"
-```
+Configure Chrome's proxy connection using [Tinyproxy](https://tinyproxy.github.io) (refer to the sample `tinyproxy.conf`).
 
 To test the CDP connection:
 ```
