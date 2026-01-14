@@ -21,8 +21,8 @@ eval $(dbus-launch --sh-syntax)
 export SESSION_MANAGER=""
 
 echo "Configuring hosts file for ad blocking..."
-sudo cp /app/hosts /etc/hosts
-wc -l /etc/hosts
+wc -l /app/hosts
+sudo tee -a /etc/hosts < /app/hosts > /dev/null
 
 echo "Starting tinyproxy on port 8119..."
 tinyproxy -d -c /app/tinyproxy.conf &
