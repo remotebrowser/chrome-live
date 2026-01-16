@@ -26,14 +26,6 @@ sudo tee -a /etc/hosts < /app/hosts > /dev/null
 
 echo "Starting tinyproxy on port 8119..."
 tinyproxy -d -c /app/tinyproxy.conf &
-for i in {1..5}; do
-    sleep 2
-    if curl -x http://127.0.0.1:8119 ip.fly.dev; then
-        echo "Tinyproxy is up and running"
-        break
-    fi
-    echo "Proxy check: attempt $i failed, retrying in 2 seconds..."
-done
 
 echo "Starting XFCE4..."
 startxfce4 >/dev/null 2>&1 & sleep 3
