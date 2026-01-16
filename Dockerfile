@@ -37,8 +37,6 @@ RUN apt-get update -y && apt-get install -y tailscale
 
 WORKDIR /app
 
-RUN curl -L https://github.com/B00merang-Project/Windows-10/archive/refs/heads/master.tar.gz -o /app/Theme.tar.gz
-
 COPY entrypoint.sh /app/entrypoint.sh
 COPY tinyproxy.conf /app/tinyproxy.conf
 
