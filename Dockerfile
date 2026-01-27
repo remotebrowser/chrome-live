@@ -22,7 +22,8 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     x11-apps \
     sudo \
     socat \
-    screen
+    screen \
+    sqlite3
 
 
 RUN install -m 0755 -d /etc/apt/keyrings && \
