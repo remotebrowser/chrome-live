@@ -1,7 +1,13 @@
-FROM mirror.gcr.io/library/debian:13-slim
+FROM mirror.gcr.io/library/ubuntu:24.04
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscf-eula select true" | debconf-set-selections
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    software-properties-common && \
+    add-apt-repository multiverse && \
+    apt-get update -y && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     ca-certificates \
@@ -23,8 +29,24 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     sudo \
     socat \
     screen \
-    sqlite3
-
+    sqlite3 \
+    cabextract \
+    fontconfig \
+    ttf-mscorefonts-installer \
+    fonts-freefont-ttf \
+    fonts-gfs-neohellenic \
+    fonts-indic \
+    fonts-ipafont-gothic \
+    fonts-kacst \
+    fonts-liberation \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    fonts-roboto \
+    fonts-thai-tlwg \
+    fonts-ubuntu \
+    fonts-wqy-zenhei \
+    fonts-open-sans \
+    && fc-cache -f -v
 
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
@@ -32,8 +54,8 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 
 RUN apt-get update && apt-get install -y google-chrome-stable
 
-RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/trixie.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
+RUN curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+RUN curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
 RUN apt-get update -y && apt-get install -y tailscale
 
 WORKDIR /app
