@@ -7,9 +7,6 @@ export SESSION_MANAGER=""
 export DBUS_SESSION_BUS_ADDRESS=""
 export USER=user
 
-echo "Starting Tailscale daemon..."
-sudo nohup tailscaled > /dev/null 2>&1 &
-echo
 
 echo "Starting TigerVNC server on DISPLAY=$DISPLAY..."
 Xvnc -alwaysshared ${DISPLAY} -geometry 1920x1080 -depth 24 -rfbport 5900 -SecurityTypes None &
