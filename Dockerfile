@@ -54,9 +54,6 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 
 RUN apt-get update && apt-get install -y google-chrome-stable
 
-RUN curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-RUN curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list | sudo tee /etc/apt/sources.list.d/tailscale.list >/dev/null
-RUN apt-get update -y && apt-get install -y tailscale
 
 WORKDIR /app
 
