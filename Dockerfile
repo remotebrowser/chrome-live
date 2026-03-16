@@ -59,7 +59,7 @@ WORKDIR /app
 
 COPY entrypoint.sh /app/entrypoint.sh
 COPY tinyproxy.conf /app/tinyproxy.conf
-COPY allowlist.txt /app/allowlist.txt
+COPY allowlist.txt /tmp/allowlist.txt
 
 EXPOSE 5900
 
@@ -74,7 +74,8 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
   && sudo mv /tmp/hblock /usr/local/bin/hblock \
   && sudo chown 0:0 /usr/local/bin/hblock \
   && sudo chmod 755 /usr/local/bin/hblock \
-  && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /app/allowlist.txt
+  && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /tmp/allowlist.txt \
+  && rm -f /tmp/allowlist.txt
 
 RUN useradd -m -s /bin/bash user && \
     chown -R user:user /app && \
