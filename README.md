@@ -26,6 +26,8 @@ podman run --name chrome-live -p 7000:80 -p 9222:9222 ghcr.io/remotebrowser/chro
 
 Configure Chrome's proxy connection using [Tinyproxy](https://tinyproxy.github.io) (refer to the sample `tinyproxy.conf`).
 
+Ad blocklist allowlist entries can be added in `allowlist.txt` (one domain per line).
+
 To test the CDP connection:
 
 ```
