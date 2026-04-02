@@ -1,0 +1,16 @@
+#!/command/with-contenv sh
+
+# Substitute environment variables into config
+sed -i \
+  -e "s|\${SERVICE_NAME}|${SERVICE_NAME:-browser-trace}|g" \
+  -e "s|\${LOGFIRE_TOKEN}|${LOGFIRE_TOKEN:-}|g" \
+  -e "s|\${LOGFIRE_TRACEPARENT}|${LOGFIRE_TRACEPARENT:-}|g" \
+  /app/browser-trace.conf
+
+# Wait for Chrome CDP
+while ! socat -T1 -u OPEN:/dev/null TCP:127.0.0.1:9221 >/dev/null 2>&1; do
+  sleep 1
+done
+
+export LOGFIRE_INSPECT_ARGUMENTS=false
+exec /usr/local/bin/browser-trace /app/browser-trace.conf

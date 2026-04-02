@@ -1,0 +1,16 @@
+#!/command/with-contenv sh
+export HOME=/home/user
+export DISPLAY=${DISPLAY:-:99}
+export SESSION_MANAGER=""
+
+# Xvnc may be started but not yet accepting connections on DISPLAY.
+i=0
+while [ "$i" -lt 30 ]; do
+  if s6-setuidgid user sh -c "DISPLAY=${DISPLAY} xrdb -query >/dev/null 2>&1"; then
+    break
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+
+exec s6-setuidgid user dbus-launch --exit-with-session startxfce4
