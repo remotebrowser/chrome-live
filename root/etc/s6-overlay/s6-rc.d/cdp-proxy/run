@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+# Wait until Chrome exposes CDP before accepting external connections.
+while ! socat -T1 -u OPEN:/dev/null TCP:127.0.0.1:9221 >/dev/null 2>&1; do
+  sleep 1
+done
+
+exec socat TCP-LISTEN:9222,fork,reuseaddr TCP:127.0.0.1:9221
