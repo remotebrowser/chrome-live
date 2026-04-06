@@ -78,6 +78,7 @@ COPY start-init.sh /usr/local/bin/start-init.sh
 COPY tinyproxy.conf /app/tinyproxy.conf
 COPY browser-trace.conf /app/browser-trace.conf
 COPY allowlist.txt /tmp/allowlist.txt
+COPY denylist.txt /tmp/denylist.txt
 COPY root/ /
 
 RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
@@ -94,8 +95,8 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
   && mv /tmp/hblock /usr/local/bin/hblock \
   && chown 0:0 /usr/local/bin/hblock \
   && chmod 755 /usr/local/bin/hblock \
-  && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /tmp/allowlist.txt \
-  && rm -f /tmp/allowlist.txt
+  && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /tmp/allowlist.txt --denylist /tmp/denylist.txt \
+  && rm -f /tmp/allowlist.txt /tmp/denylist.txt
 
 # Install browser-trace
 RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download/v0.1.0/browser-trace-linux-${TARGETARCH}" \
