@@ -1,0 +1,5 @@
+# One domain per line to block.
+# Example:
+# doubleclick.net
+
+optimizationguide-pa.googleapis.com
