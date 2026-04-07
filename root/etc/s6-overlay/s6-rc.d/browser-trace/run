@@ -3,6 +3,7 @@
 # Substitute environment variables into config
 sed -i \
   -e "s|\${SERVICE_NAME}|${SERVICE_NAME:-browser-trace}|g" \
+  -e "s|\${ENVIRONMENT}|${ENVIRONMENT:-local}|g" \
   -e "s|\${LOGFIRE_TOKEN}|${LOGFIRE_TOKEN:-}|g" \
   -e "s|\${LOGFIRE_TRACEPARENT}|${LOGFIRE_TRACEPARENT:-}|g" \
   /app/browser-trace.conf
