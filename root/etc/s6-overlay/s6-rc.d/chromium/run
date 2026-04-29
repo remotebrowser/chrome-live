@@ -1,4 +1,4 @@
 #!/command/with-contenv sh
 export HOME=/home/user
 export DISPLAY=${DISPLAY:-:99}
-exec s6-setuidgid user google-chrome-stable --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction --user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119 --enable-logging=stderr --log-level=3 google.com
+exec s6-setuidgid user google-chrome-stable --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction --user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119 --enable-logging=stderr --log-level=3 about:blank
