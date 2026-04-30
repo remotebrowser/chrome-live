@@ -42,3 +42,31 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  publish-fly:
+    needs: publish
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - app: keep-chrome-live
+            token_secret: FLY_API_TOKEN_DEMO
+          - app: keep-chrome-live-dev
+            token_secret: FLY_API_TOKEN_DEV
+          - app: keep-chrome-live-ci
+            token_secret: FLY_API_TOKEN_CI
+          - app: keep-chrome-live-oss
+            token_secret: FLY_API_TOKEN_OSS
+    steps:
+      - name: Push to Fly registry
+        uses: remotebrowser/shared-github-actions/push-fly-image@v1
+        with:
+          image: ghcr.io/${{ github.repository }}:latest
+          pull: true
+          app-name: ${{ matrix.target.app }}
+          fly-api-token: ${{ secrets[matrix.target.token_secret] }}
