@@ -2,4 +2,6 @@
 # Example:
 # doubleclick.net
 
+edgedl.me.gvt1.com
 optimizationguide-pa.googleapis.com
+safebrowsing.googleapis.com
