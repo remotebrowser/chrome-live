@@ -104,7 +104,7 @@ RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download
       -o /usr/local/bin/browser-trace && \
     chmod +x /usr/local/bin/browser-trace
 
-RUN useradd -m -s /bin/bash user && \
+RUN useradd -M -d /home/user -s /bin/bash user && \
     mkdir -p /home/user/chrome-profile && \
     chown -R user:user /app /home/user && \
     usermod -aG sudo user && \

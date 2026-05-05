@@ -11,8 +11,7 @@ if [ -f /app/hosts ]; then
   cat /app/hosts >> /etc/hosts
 fi
 
-echo "Configuring Tinyproxy deny filter..."
-: > /app/tinyproxy-filter.txt
+: > /home/user/tinyproxy-filter.txt
 
 # Tinyproxy fnmatch rules: keep exact host + wildcard subdomain for each domain.
 if [ -f /app/denylist.txt ]; then
@@ -27,7 +26,7 @@ if [ -f /app/denylist.txt ]; then
       print domain
       print "*." domain
     }
-  ' /app/denylist.txt >> /app/tinyproxy-filter.txt
+  ' /app/denylist.txt >> /home/user/tinyproxy-filter.txt
 fi
 
 if [ -f /app/hosts ]; then
@@ -47,7 +46,7 @@ if [ -f /app/hosts ]; then
         print "*." domain
       }
     }
-  ' /app/hosts >> /app/tinyproxy-filter.txt
+  ' /app/hosts >> /home/user/tinyproxy-filter.txt
 fi
 
-wc -l /app/tinyproxy-filter.txt
+wc -l /home/user/tinyproxy-filter.txt
