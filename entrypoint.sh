@@ -11,24 +11,6 @@ if [ -f /app/hosts ]; then
   cat /app/hosts >> /etc/hosts
 fi
 
-: > /home/user/tinyproxy-filter.txt
-
-# Tinyproxy fnmatch rules: keep exact host + wildcard subdomain for each domain.
-if [ -f /app/denylist.txt ]; then
-  awk '
-    NF && $1 !~ /^#/ {
-      domain=tolower($1)
-      gsub(/\r/, "", domain)
-      sub(/\.$/, "", domain)
-      if (domain == "" || domain ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) {
-        next
-      }
-      print domain
-      print "*." domain
-    }
-  ' /app/denylist.txt >> /home/user/tinyproxy-filter.txt
-fi
-
 if [ -f /app/hosts ]; then
   awk '
     NF >= 2 && $1 !~ /^#/ {
@@ -46,7 +28,7 @@ if [ -f /app/hosts ]; then
         print "*." domain
       }
     }
-  ' /app/hosts >> /home/user/tinyproxy-filter.txt
+  ' /app/hosts > /home/user/tinyproxy-filter.txt
 fi
 
 wc -l /home/user/tinyproxy-filter.txt

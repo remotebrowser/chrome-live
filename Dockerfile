@@ -77,7 +77,6 @@ COPY entrypoint.sh /etc/cont-init.d/00-entrypoint.sh
 COPY start-init.sh /usr/local/bin/start-init.sh
 COPY tinyproxy.conf /app/tinyproxy.conf
 COPY browser-trace.conf /app/browser-trace.conf
-COPY denylist.txt /app/denylist.txt
 COPY allowlist.txt /tmp/allowlist.txt
 COPY denylist.txt /tmp/denylist.txt
 COPY root/ /
