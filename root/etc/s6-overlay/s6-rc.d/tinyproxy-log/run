@@ -1,6 +1,8 @@
 #!/command/with-contenv sh
 
-# Substitute environment variables into config
+# Substitute environment variables into the shared browser-trace config file.
+# Idempotent and atomic: if the sibling `browser-trace` service has already
+# substituted, the patterns no longer match and this is a no-op.
 sed -i \
   -e "s|\${SERVICE_NAME}|${SERVICE_NAME:-browser-trace}|g" \
   -e "s|\${ENVIRONMENT}|${ENVIRONMENT:-local}|g" \
@@ -9,10 +11,5 @@ sed -i \
   -e "s|\${LOG_LEVEL}|${LOG_LEVEL:-INFO}|g" \
   /app/browser-trace.conf
 
-# Wait for Chrome CDP
-while ! socat -T1 -u OPEN:/dev/null TCP:127.0.0.1:9221 >/dev/null 2>&1; do
-  sleep 1
-done
-
 export LOGFIRE_INSPECT_ARGUMENTS=false
-exec /usr/local/bin/browser-trace /app/browser-trace.conf
+exec /usr/local/bin/browser-trace tinyproxy /app/browser-trace.conf
