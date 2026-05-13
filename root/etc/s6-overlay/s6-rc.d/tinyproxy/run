@@ -1,2 +1,5 @@
 #!/command/with-contenv sh
+# Redirect stderr to stdout so tinyproxy's default-stderr log output flows
+# through the s6-rc producer-for pipe (which is wired to the consumer's stdin).
+exec 2>&1
 exec tinyproxy -d -c /app/tinyproxy.conf
