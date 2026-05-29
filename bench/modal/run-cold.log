@@ -1,0 +1,59 @@
+[setup] loaded env from /Users/bin/dev/chrome-live/bench/modal/../.env
+[bench] platform=modal mode=cold count=10 timeout=90s poll=0.2s wall=600s
+[setup] running bp_setup
+[setup] starting modal_bench.py coprocess
+# daemon ready
+[setup] SETUP_OK cmd=adapted-boot cpu=2.0 mem=2048 arch=x86_64 nproc=2 memkb=470001272
+[run 1/10] prep: cold-stopped
+[run 1/10] trigger (cold start)
+[run 1/10] cdp internal ready in 3792ms
+[run 1/10] cdp external ready in 4432ms
+[run 1/10] novnc ready in 5149ms (informational)
+[run 2/10] prep: cold-stopped
+[run 2/10] trigger (cold start)
+[run 2/10] cdp internal ready in 4368ms
+[run 2/10] cdp external ready in 4676ms
+[run 2/10] novnc ready in 5192ms (informational)
+[run 3/10] prep: cold-stopped
+[run 3/10] trigger (cold start)
+[run 3/10] cdp internal ready in 3853ms
+[run 3/10] cdp external ready in 4719ms
+[run 3/10] novnc ready in 5586ms (informational)
+[run 4/10] prep: cold-stopped
+[run 4/10] trigger (cold start)
+[run 4/10] cdp internal ready in 6737ms
+[run 4/10] cdp external ready in 7653ms
+[run 4/10] novnc ready in 8621ms (informational)
+[run 5/10] prep: cold-stopped
+[run 5/10] trigger (cold start)
+[run 5/10] cdp internal ready in 3868ms
+[run 5/10] cdp external ready in 4566ms
+[run 5/10] novnc ready in 5014ms (informational)
+[run 6/10] prep: cold-stopped
+[run 6/10] trigger (cold start)
+[run 6/10] cdp internal ready in 3924ms
+[run 6/10] cdp external ready in 4606ms
+[run 6/10] novnc ready in 5060ms (informational)
+[run 7/10] prep: cold-stopped
+[run 7/10] trigger (cold start)
+[run 7/10] cdp internal ready in 3633ms
+[run 7/10] cdp external ready in 5494ms
+[run 7/10] novnc ready in 6411ms (informational)
+[run 8/10] prep: cold-stopped
+[run 8/10] trigger (cold start)
+[run 8/10] cdp internal ready in 3633ms
+[run 8/10] cdp external ready in 4027ms
+[run 8/10] novnc ready in 4477ms (informational)
+[run 9/10] prep: cold-stopped
+[run 9/10] trigger (cold start)
+[run 9/10] cdp internal ready in 8291ms
+[run 9/10] cdp external ready in 9458ms
+[run 9/10] novnc ready in 10201ms (informational)
+[run 10/10] prep: cold-stopped
+[run 10/10] trigger (cold start)
+[run 10/10] cdp internal ready in 5086ms
+[run 10/10] cdp external ready in 5511ms
+[run 10/10] novnc ready in 5975ms (informational)
+[result] CDP internal n=10 p50=3868ms p95=8291ms min=3633ms max=8291ms
+[result] CDP external n=10 p50=4676ms p95=9458ms min=4027ms max=9458ms
+[teardown] running bp_teardown

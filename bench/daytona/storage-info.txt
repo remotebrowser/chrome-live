@@ -1,0 +1,38 @@
+== uname -m ==
+x86_64
+== nproc ==
+64
+== mem (MiB) ==
+773337
+== df -T / ==
+Filesystem     Type    1K-blocks  Used Available Use% Mounted on
+overlay        overlay  10485760 52636  10433124   1% /
+== rootfs mount (/proc/mounts) ==
+overlay / overlay rw,relatime,lowerdir=/var/lib/docker/overlay2/l/MMAIHIRRJXUIYWU73LVCWADSFL:/var/lib/docker/overlay2/l/QVYPTUYSDI2RDBHDGL72377SM4:/var/lib/docker/overlay2/l/E5SSORJV72BDCBPHW2KQ5ZHRQT:/var/lib/docker/overlay2/l/PQTOLAHULN4DARY5EKPTECLM5P:/var/lib/docker/overlay2/l/IHWMTAJXHEGALFXBCOZBER44JJ:/var/lib/docker/overlay2/l/5S4V4LBPRBDS73L55NKN6V2RHM:/var/lib/docker/overlay2/l/O6CCKXSHKXRBF36L4OX6TAI4U3:/var/lib/docker/overlay2/l/GLH74OHNHV3CWDU5WHGIMX2OXI:/var/lib/docker/overlay2/l/OTR6PTQ2JB3HG5COCAYVX7UMQY:/var/lib/docker/overlay2/l/U6XICRD6W5JH34PWK5GUDCJHMJ:/var/lib/docker/overlay2/l/FWC6UTT7C3YDJZHQ7UDELMDH33:/var/lib/docker/overlay2/l/UCHGOPBCXRCAB4VBJ26R2XFFME:/var/lib/docker/overlay2/l/P6SP6YMGXEQDDHL4G5RPILGDXT:/var/lib/docker/overlay2/l/TX3TBHY4I52IO4W64CSZNY5PZL:/var/lib/docker/overlay2/l/4XHGTVCPFMMSMC47QDCOZHFNBL:/var/lib/docker/overlay2/l/XTNTOTOAVMCUS7L45VKA2M7WSI:/var/lib/docker/overlay2/l/NFKBTH2T6SUHAF4EJTY7E2JP5E:/var/lib/docker/overlay2/l/6RGFGYZ7LD2EXV7IP55OPBEKH5:/var/lib/docker/overlay2/l/5SXIJVKFCFBONFHMKYXHWDLOH4:/var/lib/docker/overlay2/l/JLANPX3CJ4LN4R5CCTACZZRZPF:/var/lib/docker/overlay2/l/XENZE325DIVAX4KI5N5E4VARUQ,upperdir=/var/lib/docker/overlay2/199a5c87680ad1b423065b42a33624ce6374818005d0f36e56a8f9ff53190973/diff,workdir=/var/lib/docker/overlay2/199a5c87680ad1b423065b42a33624ce6374818005d0f36e56a8f9ff53190973/work,nouserxattr 0 0
+== lsblk ==
+NAME        ROTA TYPE MOUNTPOINT
+nvme2n1        0 disk 
+|-nvme2n1p1    0 part 
+`-nvme2n1p2    0 part 
+nvme1n1        0 disk 
+`-nvme1n1p1    0 part 
+nvme3n1        0 disk 
+|-nvme3n1p1    0 part 
+`-nvme3n1p2    0 part 
+nvme0n1        0 disk 
+`-nvme0n1p1    0 part 
+== /sys rotational ==
+/sys/block/loop0/queue/rotational=
+/sys/block/loop1/queue/rotational=
+/sys/block/loop2/queue/rotational=
+/sys/block/loop3/queue/rotational=
+/sys/block/loop4/queue/rotational=
+/sys/block/loop5/queue/rotational=
+/sys/block/loop6/queue/rotational=
+/sys/block/loop7/queue/rotational=
+/sys/block/md0/queue/rotational=
+/sys/block/md1/queue/rotational=
+/sys/block/nvme0n1/queue/rotational=0
+/sys/block/nvme1n1/queue/rotational=0
+/sys/block/nvme2n1/queue/rotational=0
+/sys/block/nvme3n1/queue/rotational=0

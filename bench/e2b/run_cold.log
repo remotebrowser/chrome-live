@@ -1,0 +1,47 @@
+# Run: 2026-05-28 15:41:03 PDT
+
+[bench] platform=e2b mode=cold count=10 timeout=180s poll=0.2s
+[setup] running bp_setup
+sandbox=ippg065kokjp3lnxr7ij1 novnc=https://80-ippg065kokjp3lnxr7ij1.e2b.app
+[run 1/10] prep: cold-stopped
+[run 1/10] trigger (cold start)
+[run 1/10] cdp ready in 45540ms
+[run 1/10] novnc ready in 45927ms (informational)
+[run 2/10] prep: cold-stopped
+[run 2/10] trigger (cold start)
+[run 2/10] cdp ready in 9042ms
+[run 2/10] novnc ready in 9448ms (informational)
+[run 3/10] prep: cold-stopped
+[run 3/10] trigger (cold start)
+[run 3/10] cdp ready in 36247ms
+[run 3/10] novnc ready in 36811ms (informational)
+[run 4/10] prep: cold-stopped
+[run 4/10] trigger (cold start)
+[run 4/10] cdp ready in 9252ms
+[run 4/10] novnc ready in 9592ms (informational)
+[run 5/10] prep: cold-stopped
+[run 5/10] trigger (cold start)
+[run 5/10] cdp ready in 8700ms
+[run 5/10] novnc ready in 8933ms (informational)
+[run 6/10] prep: cold-stopped
+[run 6/10] trigger (cold start)
+[run 6/10] cdp ready in 8720ms
+[run 6/10] novnc ready in 8967ms (informational)
+[run 7/10] prep: cold-stopped
+[run 7/10] trigger (cold start)
+[run 7/10] cdp ready in 30495ms
+[run 7/10] novnc ready in 30825ms (informational)
+[run 8/10] prep: cold-stopped
+[run 8/10] trigger (cold start)
+[run 8/10] cdp ready in 32540ms
+[run 8/10] novnc ready in 32949ms (informational)
+[run 9/10] prep: cold-stopped
+[run 9/10] trigger (cold start)
+[run 9/10] cdp ready in 34602ms
+[run 9/10] novnc ready in 35175ms (informational)
+[run 10/10] prep: cold-stopped
+[run 10/10] trigger (cold start)
+[run 10/10] cdp ready in 9904ms
+[run 10/10] novnc ready in 10251ms (informational)
+[result] CDP n=10 p50=9904ms p95=45540ms min=8700ms max=45540ms
+[teardown] running bp_teardown

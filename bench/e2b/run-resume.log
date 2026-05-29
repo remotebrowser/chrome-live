@@ -1,0 +1,45 @@
+[bench] platform=e2b mode=resume count=10 timeout=180s poll=0.2s wall=600s
+[setup] running bp_setup
+sandbox=i396gmwg0svsyqaw7ti8s novnc=https[bench] BENCH_TIMEOUT=600s exceeded; aborting
+ prep: paused
+[run 1/10] trigger (resume)
+[run 1/10] cdp internal ready in 2811ms
+[run 1/10] novnc ready in 2576ms (informational)
+[run 2/10] prep: paused
+[run 2/10] trigger (resume)
+[run 2/10] cdp internal ready in 2986ms
+[run 2/10] novnc ready in 2646ms (informational)
+[run 3/10] prep: paused
+[run 3/10] trigger (resume)
+[run 3/10] cdp internal ready in 1721ms
+[run 3/10] novnc ready in 1400ms (informational)
+[run 4/10] prep: paused
+[run 4/10] trigger (resume)
+[run 4/10] cdp internal ready in 1161ms
+[run 4/10] novnc ready in 871ms (informational)
+[run 5/10] prep: paused
+[run 5/10] trigger (resume)
+[run 5/10] cdp internal ready in 1805ms
+[run 5/10] novnc ready in 1507ms (informational)
+[run 6/10] prep: paused
+[run 6/10] trigger (resume)
+[run 6/10] cdp internal ready in 1590ms
+[run 6/10] novnc ready in 1304ms (informational)
+[run 7/10] prep: paused
+[run 7/10] trigger (resume)
+[run 7/10] cdp internal ready in 3355ms
+[run 7/10] novnc ready in 3064ms (informational)
+[run 8/10] prep: paused
+[run 8/10] trigger (resume)
+[run 8/10] cdp internal ready in 2522ms
+[run 8/10] novnc ready in 2233ms (informational)
+[run 9/10] prep: paused
+[run 9/10] trigger (resume)
+[run 9/10] cdp internal ready in 2233ms
+[run 9/10] novnc ready in 1883ms (informational)
+[run 10/10] prep: paused
+[run 10/10] trigger (resume)
+[run 10/10] cdp internal ready in 3130ms
+[run 10/10] novnc ready in 2837ms (informational)
+[result] CDP internal n=10 p50=2233ms p95=3355ms min=1161ms max=3355ms
+[teardown] running bp_teardown

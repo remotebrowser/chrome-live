@@ -1,0 +1,17 @@
+[setup] creating app chrome-live-bench in org remote-browsers-dev
+New app created: chrome-live-bench
+[setup] allocating dedicated IPv4 (needed for port 9222) + IPv6
+ VERSION │ IP           │ TYPE                              │ REGION │ CREATED AT 
+ v4      │ 37.16.23.115 │ public ingress (dedicated, $2/mo) │ global │ just now   
+
+ VERSION │ IP                      │ TYPE                       │ REGION │ CREATED AT 
+ v6      │ 2a09:8280:1::11c:a730:0 │ public ingress (dedicated) │ global │ just now   
+
+[setup] running machine: shared-cpu-4x / 2048MB / sjc (image pull happens HERE, untimed)
+Searching for image 'ghcr.io/remotebrowser/chrome-live:latest' remotely...
+image found: img_3mno4w61oznmpk18
+[setup] machine=286dd35b5e05d8 ip4=37.16.23.115
+[setup] waiting for first full boot (untimed)
+[setup] first boot complete
+[setup] warm-up cold cycle (untimed; avoids cold-cache outlier on run 1)
+[setup] done

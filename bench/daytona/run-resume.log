@@ -1,0 +1,60 @@
+[bench] platform=daytona mode=resume count=10 timeout=120s poll=0.2s wall=600s
+[setup] running bp_setup
+[setup] creating sandbox (2 vCPU / 2 GiB / 10 GiB disk)
+[setup] sandbox ready: 86482dc5-6e2d-4dff-89d4-683de54d4ac1
+[setup] CDP endpoint: https://9222-86482dc5-6e2d-4dff-89d4-683de54d4ac1.daytonaproxy01.net
+[setup] noVNC endpoint (informational): https://8080-86482dc5-6e2d-4dff-89d4-683de54d4ac1.daytonaproxy01.net
+[setup] storage probe saved to bench/daytona/storage-info.txt
+[run 1/10] prep: paused
+[run 1/10] trigger (resume)
+[run 1/10] cdp internal ready in 2294ms
+[run 1/10] cdp external ready in 4917ms
+[run 1/10] novnc ready in 5441ms (informational)
+[run 2/10] prep: paused
+[run 2/10] trigger (resume)
+[run 2/10] cdp internal ready in 1873ms
+[run 2/10] cdp external ready in 4274ms
+[run 2/10] novnc ready in 4667ms (informational)
+[run 3/10] prep: paused
+[run 3/10] trigger (resume)
+[run 3/10] cdp internal ready in 2060ms
+[run 3/10] cdp external ready in 4562ms
+[run 3/10] novnc ready in 4907ms (informational)
+[run 4/10] prep: paused
+[run 4/10] trigger (resume)
+[run 4/10] cdp internal ready in 1906ms
+[run 4/10] cdp external ready in 4498ms
+[run 4/10] novnc ready in 4836ms (informational)
+[run 5/10] prep: paused
+[run 5/10] trigger (resume)
+[run 5/10] cdp internal ready in 2071ms
+[run 5/10] cdp external ready in 4270ms
+[run 5/10] novnc ready in 4633ms (informational)
+[run 6/10] prep: paused
+[run 6/10] trigger (resume)
+[run 6/10] cdp internal ready in 2146ms
+[run 6/10] cdp external ready in 4775ms
+[run 6/10] novnc ready in 5130ms (informational)
+[run 7/10] prep: paused
+[run 7/10] trigger (resume)
+[run 7/10] cdp internal ready in 1928ms
+[run 7/10] cdp external ready in 4735ms
+[run 7/10] novnc ready in 5232ms (informational)
+[run 8/10] prep: paused
+[run 8/10] trigger (resume)
+[run 8/10] cdp internal ready in 2097ms
+[run 8/10] cdp external ready in 4783ms
+[run 8/10] novnc ready in 5308ms (informational)
+[run 9/10] prep: paused
+[run 9/10] trigger (resume)
+[run 9/10] cdp internal ready in 2030ms
+[run 9/10] cdp external ready in 4652ms
+[run 9/10] novnc ready in 5022ms (informational)
+[run 10/10] prep: paused
+[run 10/10] trigger (resume)
+[run 10/10] cdp internal ready in 2060ms
+[run 10/10] cdp external ready in 4733ms
+[run 10/10] novnc ready in 5098ms (informational)
+[result] CDP internal n=10 p50=2060ms p95=2294ms min=1873ms max=2294ms
+[result] CDP external n=10 p50=4652ms p95=4917ms min=4270ms max=4917ms
+[teardown] running bp_teardown

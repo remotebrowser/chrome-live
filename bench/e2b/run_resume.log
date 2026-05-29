@@ -1,0 +1,47 @@
+# Run: 2026-05-28 15:41:03 PDT
+
+[bench] platform=e2b mode=resume count=10 timeout=180s poll=0.2s
+[setup] running bp_setup
+sandbox=ig7gx3gxwn7sl3rw83eg2 novnc=https://80-ig7gx3gxwn7sl3rw83eg2.e2b.app
+[run 1/10] prep: paused
+[run 1/10] trigger (resume)
+[run 1/10] cdp ready in 1968ms
+[run 1/10] novnc ready in 2344ms (informational)
+[run 2/10] prep: paused
+[run 2/10] trigger (resume)
+[run 2/10] cdp ready in 2709ms
+[run 2/10] novnc ready in 3044ms (informational)
+[run 3/10] prep: paused
+[run 3/10] trigger (resume)
+[run 3/10] cdp ready in 1734ms
+[run 3/10] novnc ready in 1940ms (informational)
+[run 4/10] prep: paused
+[run 4/10] trigger (resume)
+[run 4/10] cdp ready in 1671ms
+[run 4/10] novnc ready in 1853ms (informational)
+[run 5/10] prep: paused
+[run 5/10] trigger (resume)
+[run 5/10] cdp ready in 1626ms
+[run 5/10] novnc ready in 1831ms (informational)
+[run 6/10] prep: paused
+[run 6/10] trigger (resume)
+[run 6/10] cdp ready in 1783ms
+[run 6/10] novnc ready in 2021ms (informational)
+[run 7/10] prep: paused
+[run 7/10] trigger (resume)
+[run 7/10] cdp ready in 1577ms
+[run 7/10] novnc ready in 1770ms (informational)
+[run 8/10] prep: paused
+[run 8/10] trigger (resume)
+[run 8/10] cdp ready in 1625ms
+[run 8/10] novnc ready in 1851ms (informational)
+[run 9/10] prep: paused
+[run 9/10] trigger (resume)
+[run 9/10] cdp ready in 1764ms
+[run 9/10] novnc ready in 1965ms (informational)
+[run 10/10] prep: paused
+[run 10/10] trigger (resume)
+[run 10/10] cdp ready in 1604ms
+[run 10/10] novnc ready in 1820ms (informational)
+[result] CDP n=10 p50=1671ms p95=2709ms min=1577ms max=2709ms
+[teardown] running bp_teardown

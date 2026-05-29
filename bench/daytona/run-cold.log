@@ -1,0 +1,60 @@
+[bench] platform=daytona mode=cold count=10 timeout=120s poll=0.2s wall=600s
+[setup] running bp_setup
+[setup] creating sandbox (2 vCPU / 2 GiB / 10 GiB disk)
+[setup] sandbox ready: 9773fe81-61d5-4bb5-b380-e183c975c3fb
+[setup] CDP endpoint: https://9222-9773fe81-61d5-4bb5-b380-e183c975c3fb.daytonaproxy01.net
+[setup] noVNC endpoint (informational): https://8080-9773fe81-61d5-4bb5-b380-e183c975c3fb.daytonaproxy01.net
+[setup] storage probe saved to bench/daytona/storage-info.txt
+[run 1/10] prep: cold-stopped
+[run 1/10] trigger (cold start)
+[run 1/10] cdp internal ready in 2081ms
+[run 1/10] cdp external ready in 4808ms
+[run 1/10] novnc ready in 5181ms (informational)
+[run 2/10] prep: cold-stopped
+[run 2/10] trigger (cold start)
+[run 2/10] cdp internal ready in 2130ms
+[run 2/10] cdp external ready in 4594ms
+[run 2/10] novnc ready in 4987ms (informational)
+[run 3/10] prep: cold-stopped
+[run 3/10] trigger (cold start)
+[run 3/10] cdp internal ready in 2095ms
+[run 3/10] cdp external ready in 4597ms
+[run 3/10] novnc ready in 5001ms (informational)
+[run 4/10] prep: cold-stopped
+[run 4/10] trigger (cold start)
+[run 4/10] cdp internal ready in 1994ms
+[run 4/10] cdp external ready in 4960ms
+[run 4/10] novnc ready in 5464ms (informational)
+[run 5/10] prep: cold-stopped
+[run 5/10] trigger (cold start)
+[run 5/10] cdp internal ready in 1958ms
+[run 5/10] cdp external ready in 4657ms
+[run 5/10] novnc ready in 5006ms (informational)
+[run 6/10] prep: cold-stopped
+[run 6/10] trigger (cold start)
+[run 6/10] cdp internal ready in 2010ms
+[run 6/10] cdp external ready in 4699ms
+[run 6/10] novnc ready in 5199ms (informational)
+[run 7/10] prep: cold-stopped
+[run 7/10] trigger (cold start)
+[run 7/10] cdp internal ready in 2348ms
+[run 7/10] cdp external ready in 4983ms
+[run 7/10] novnc ready in 5345ms (informational)
+[run 8/10] prep: cold-stopped
+[run 8/10] trigger (cold start)
+[run 8/10] cdp internal ready in 1962ms
+[run 8/10] cdp external ready in 4657ms
+[run 8/10] novnc ready in 5038ms (informational)
+[run 9/10] prep: cold-stopped
+[run 9/10] trigger (cold start)
+[run 9/10] cdp internal ready in 1957ms
+[run 9/10] cdp external ready in 4533ms
+[run 9/10] novnc ready in 4887ms (informational)
+[run 10/10] prep: cold-stopped
+[run 10/10] trigger (cold start)
+[run 10/10] cdp internal ready in 2248ms
+[run 10/10] cdp external ready in 4485ms
+[run 10/10] novnc ready in 4997ms (informational)
+[result] CDP internal n=10 p50=2010ms p95=2348ms min=1957ms max=2348ms
+[result] CDP external n=10 p50=4657ms p95=4983ms min=4485ms max=4983ms
+[teardown] running bp_teardown

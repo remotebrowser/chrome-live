@@ -41,7 +41,7 @@ docker build -t chrome-live .
 docker run -p 7000:80 chrome-live
 ```
 
-To deploy to fly
+To deploy to [Fly.io](https://fly.io)
 
 ```
 fly apps create test-chrome-live
@@ -51,3 +51,12 @@ fly deploy --ha=false -a test-chrome-live
 FLY_IP=$(fly ips list -a test-chrome-live --json | jq -r '.[] | select(.Type=="v4") | .Address')
 curl http://$FLY_IP:9222/json/list
 ```
+
+## Provider startup benchmarks
+
+Measured cold-boot and resume latency for chrome-live on several hosting
+providers, with a recommendation for which orchestration approach (direct spawn
+vs pre-warmed pool) fits each.
+
+- Aggregated results and ranking: [bench/REPORT.md](bench/REPORT.md)
+- Harness layout, credentials, and reproduction steps: [bench/README.md](bench/README.md)

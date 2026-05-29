@@ -1,0 +1,56 @@
+# Run: 2026-05-28 15:59:26 PDT
+
+[bench] platform=fly mode=cold count=10 timeout=90s poll=0.2s
+[setup] running bp_setup
+[setup] app chrome-live-bench exists, reusing
+[setup] running machine: shared-cpu-4x / 2048MB / sjc (image pull happens HERE, untimed)
+Searching for image 'ghcr.io/remotebrowser/chrome-live:latest' remotely...
+image found: img_3mno4w61oznmpk18
+[setup] machine=68341eec12d028 ip4=109.105.220.126
+[setup] waiting for first full boot (untimed)
+[setup] first boot complete
+[setup] warm-up cold cycle (untimed; avoids cold-cache outlier on run 1)
+[setup] done
+[run 1/10] prep: cold-stopped
+[run 1/10] trigger (cold start)
+[run 1/10] cdp ready in 2025ms
+[run 1/10] novnc ready in 2151ms (informational)
+[run 2/10] prep: cold-stopped
+[run 2/10] trigger (cold start)
+[run 2/10] cdp ready in 2650ms
+[run 2/10] novnc ready in 2787ms (informational)
+[run 3/10] prep: cold-stopped
+[run 3/10] trigger (cold start)
+[run 3/10] cdp ready in 2527ms
+[run 3/10] novnc ready in 2629ms (informational)
+[run 4/10] prep: cold-stopped
+[run 4/10] trigger (cold start)
+[run 4/10] cdp ready in 2811ms
+[run 4/10] novnc ready in 2913ms (informational)
+[run 5/10] prep: cold-stopped
+[run 5/10] trigger (cold start)
+[run 5/10] cdp ready in 2256ms
+[run 5/10] novnc ready in 2444ms (informational)
+[run 6/10] prep: cold-stopped
+[run 6/10] trigger (cold start)
+[run 6/10] cdp ready in 2511ms
+[run 6/10] novnc ready in 2630ms (informational)
+[run 7/10] prep: cold-stopped
+[run 7/10] trigger (cold start)
+[run 7/10] cdp ready in 2502ms
+[run 7/10] novnc ready in 2872ms (informational)
+[run 8/10] prep: cold-stopped
+[run 8/10] trigger (cold start)
+[run 8/10] cdp ready in 2329ms
+[run 8/10] novnc ready in 2515ms (informational)
+[run 9/10] prep: cold-stopped
+[run 9/10] trigger (cold start)
+[run 9/10] cdp ready in 2634ms
+[run 9/10] novnc ready in 2871ms (informational)
+[run 10/10] prep: cold-stopped
+[run 10/10] trigger (cold start)
+[run 10/10] cdp ready in 1694ms
+[run 10/10] novnc ready in 1789ms (informational)
+[result] CDP n=10 p50=2502ms p95=2811ms min=1694ms max=2811ms
+[teardown] running bp_teardown
+[teardown] (skipped; run 'bench/fly/fly.sh teardown' to destroy)
