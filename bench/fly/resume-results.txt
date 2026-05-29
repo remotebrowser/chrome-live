@@ -1,0 +1,56 @@
+# Run: 2026-05-28 15:59:26 PDT
+
+[bench] platform=fly mode=resume count=10 timeout=90s poll=0.2s
+[setup] running bp_setup
+[setup] app chrome-live-bench exists, reusing
+[setup] running machine: shared-cpu-4x / 2048MB / sjc (image pull happens HERE, untimed)
+Searching for image 'ghcr.io/remotebrowser/chrome-live:latest' remotely...
+image found: img_3mno4w61oznmpk18
+[setup] machine=68341eec12d028 ip4=109.105.220.126
+[setup] waiting for first full boot (untimed)
+[setup] first boot complete
+[setup] warm-up cold cycle (untimed; avoids cold-cache outlier on run 1)
+[setup] done
+[run 1/10] prep: paused
+[run 1/10] trigger (resume)
+[run 1/10] cdp ready in 952ms
+[run 1/10] novnc ready in 1129ms (informational)
+[run 2/10] prep: paused
+[run 2/10] trigger (resume)
+[run 2/10] cdp ready in 1357ms
+[run 2/10] novnc ready in 2922ms (informational)
+[run 3/10] prep: paused
+[run 3/10] trigger (resume)
+[run 3/10] cdp ready in 1231ms
+[run 3/10] novnc ready in 1339ms (informational)
+[run 4/10] prep: paused
+[run 4/10] trigger (resume)
+[run 4/10] cdp ready in 921ms
+[run 4/10] novnc ready in 1030ms (informational)
+[run 5/10] prep: paused
+[run 5/10] trigger (resume)
+[run 5/10] cdp ready in 995ms
+[run 5/10] novnc ready in 1095ms (informational)
+[run 6/10] prep: paused
+[run 6/10] trigger (resume)
+[run 6/10] cdp ready in 1124ms
+[run 6/10] novnc ready in 1224ms (informational)
+[run 7/10] prep: paused
+[run 7/10] trigger (resume)
+[run 7/10] cdp ready in 904ms
+[run 7/10] novnc ready in 1013ms (informational)
+[run 8/10] prep: paused
+[run 8/10] trigger (resume)
+[run 8/10] cdp ready in 934ms
+[run 8/10] novnc ready in 1048ms (informational)
+[run 9/10] prep: paused
+[run 9/10] trigger (resume)
+[run 9/10] cdp ready in 870ms
+[run 9/10] novnc ready in 969ms (informational)
+[run 10/10] prep: paused
+[run 10/10] trigger (resume)
+[run 10/10] cdp ready in 1019ms
+[run 10/10] novnc ready in 1117ms (informational)
+[result] CDP n=10 p50=952ms p95=1357ms min=870ms max=1357ms
+[teardown] running bp_teardown
+[teardown] (skipped; run 'bench/fly/fly.sh teardown' to destroy)

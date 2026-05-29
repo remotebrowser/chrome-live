@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.*
+
+# npm (only used transiently by some bench scripts, not committed)
+node_modules/
+
+# Python venvs / caches (created by bench scripts)
+.venv/
+.venv-*/
+**/.venv/
+**/.venv-*/
+__pycache__/
+*.pyc
+
+# Per-platform bench runtime state (sandbox/machine ids and similar)
+**/.daytona_state
+**/.e2b_state
+**/.fly-state

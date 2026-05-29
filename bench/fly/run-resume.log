@@ -1,0 +1,65 @@
+[bench] platform=fly mode=resume count=10 timeout=90s poll=0.2s wall=600s
+[setup] running bp_setup
+[setup] app chrome-live-bench exists, reusing
+[setup] running machine: shared-cpu-4x / 2048MB / sjc (image pull happens HERE, untimed)
+Searching for image 'ghcr.io/remotebrowser/chrome-live:latest' remotely...
+image found: img_3mno4w61oznmpk18
+[setup] machine=286dd35b5e05d8 ip4=37.16.23.115
+[setup] waiting for first full boot (untimed)
+[setup] first boot complete
+[setup] warm-up cold cycle (untimed; avoids cold-cache outlier on run 1)
+[setup] done
+[run 1/10] prep: paused
+[run 1/10] trigger (resume)
+[run 1/10] cdp internal ready in 4833ms
+[run 1/10] cdp external ready in 5030ms
+[run 1/10] novnc ready in 5169ms (informational)
+[run 2/10] prep: paused
+[run 2/10] trigger (resume)
+[run 2/10] cdp internal ready in 1748ms
+[run 2/10] cdp external ready in 1938ms
+[run 2/10] novnc ready in 2082ms (informational)
+[run 3/10] prep: paused
+[run 3/10] trigger (resume)
+[run 3/10] cdp internal ready in 2016ms
+[run 3/10] cdp external ready in 2146ms
+[run 3/10] novnc ready in 2268ms (informational)
+[run 4/10] prep: paused
+[run 4/10] trigger (resume)
+[run 4/10] cdp internal ready in 2011ms
+[run 4/10] cdp external ready in 2191ms
+[run 4/10] novnc ready in 2319ms (informational)
+[run 5/10] prep: paused
+[run 5/10] trigger (resume)
+[run 5/10] cdp internal ready in 1888ms
+[run 5/10] cdp external ready in 2058ms
+[run 5/10] novnc ready in 2527ms (informational)
+[run 6/10] prep: paused
+[run 6/10] trigger (resume)
+[run 6/10] cdp internal ready in 1571ms
+[run 6/10] cdp external ready in 1800ms
+[run 6/10] novnc ready in 1930ms (informational)
+[run 7/10] prep: paused
+[run 7/10] trigger (resume)
+[run 7/10] cdp internal ready in 1904ms
+[run 7/10] cdp external ready in 2013ms
+[run 7/10] novnc ready in 2126ms (informational)
+[run 8/10] prep: paused
+[run 8/10] trigger (resume)
+[run 8/10] cdp internal ready in 1646ms
+[run 8/10] cdp external ready in 1750ms
+[run 8/10] novnc ready in 2199ms (informational)
+[run 9/10] prep: paused
+[run 9/10] trigger (resume)
+[run 9/10] cdp internal ready in 1579ms
+[run 9/10] cdp external ready in 1719ms
+[run 9/10] novnc ready in 1855ms (informational)
+[run 10/10] prep: paused
+[run 10/10] trigger (resume)
+[run 10/10] cdp internal ready in 1570ms
+[run 10/10] cdp external ready in 1665ms
+[run 10/10] novnc ready in 1789ms (informational)
+[result] CDP internal n=10 p50=1748ms p95=4833ms min=1570ms max=4833ms
+[result] CDP external n=10 p50=1938ms p95=5030ms min=1665ms max=5030ms
+[teardown] running bp_teardown
+[teardown] (skipped; run 'bench/fly/fly.sh teardown' to destroy)
