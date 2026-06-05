@@ -16,11 +16,11 @@ relying on it.
 
 Aggregated results from the per-platform validation sessions. Each platform was
 measured in its own session with a reusable script built on the shared
-`bench/lib.sh` timing harness. This report covers the four platforms with
-working free trials that have completed: [Fly.io][fly], [Modal][modal],
-[Daytona][daytona], [E2B][e2b]. The other four ([Hetzner][hetzner] NVMe baseline,
-[Northflank][northflank], [Koyeb][koyeb], [Cloudflare][cloudflare-containers])
-are pending or blocked, listed at the end.
+`bench/lib.sh` timing harness. This report covers the five platforms that have
+completed: [Fly.io][fly], [Modal][modal], [Daytona][daytona], [E2B][e2b], and
+[Northflank][northflank] (measured 2026-06-05). The other three
+([Hetzner][hetzner] NVMe baseline, [Koyeb][koyeb],
+[Cloudflare][cloudflare-containers]) are pending, listed at the end.
 
 Goal: one ephemeral instance per user session, ready (CDP responding) on demand,
 scaling to zero with no fixed base fee. VNC/noVNC is out of scope; CDP is the
@@ -43,6 +43,11 @@ Approach is "direct" (spawn fresh container per request, zero idle cost) or
 | 2    | [Daytona][daytona] | 2.1 / 2.3          | 4.7 / 4.9          | 2.0 / 2.3        | 4.7 / 5.0        | $0.133                               | $0 (+$200 credit)   | direct   |
 | 3    | [E2B][e2b]         | 2.2 / 3.4          | n/a                | 24.2 / 32.5      | n/a              | $0.133                               | $150/mo (mandatory) | pool     |
 | 4    | [Modal][modal]     | 3.0 / 4.4          | 3.6 / 5.0          | 3.9 / 8.3        | 4.7 / 9.5        | ~$0.19                               | $0 (+$30/mo credit) | pool     |
+| 5    | [Northflank][northflank] | n/a (no resume) | n/a            | n/a              | 15.9 / 33.1      | $0.067 (2 vCPU / 4 GiB)              | $0                  | direct (cold) |
+
+Northflank is unranked on resume (it has no memory snapshot) and has no internal
+number (its exec backend is unavailable); the 15.9s is the public-edge cold,
+the slowest measured. It is listed last.
 
 How each platform delivers that performance:
 
@@ -59,6 +64,10 @@ How each platform delivers that performance:
   run was ~10s p50.
 - Modal: gVisor checkpoint/restore. Latency capped by gVisor syscall overhead
   + tunnel RTT, not disk. Stock s6 image needs an adapted boot.
+- Northflank: plain k8s pods, no memory snapshot, so cold is the only path and
+  it is slow (~16s p50, ~33s p95). Same Modal-style adapted boot needed (PID-2
+  injector + no CAP_SYS_ADMIN, so unshare is denied and the stock image
+  crash-loops). Cheap ($0.067/hr, $0 base) but the cold latency rules it out.
 
 Bottom line: with internal CDP as the primary signal, Fly.io leads on resume
 (p50 1.7s, min 1.6s) AND remains the cheapest by a wide margin, so it's the
@@ -77,18 +86,18 @@ extrapolations, not measurements.
 1. [Koyeb][koyeb] (pool). Claims ~200ms snapshot-backed light-sleep wake. Cost: per-second,
    but the small-CPU container rate is not cleanly published; a possible ~$29/mo
    base plan would fail the no-base-fee rule. Unverified; needs a token.
-2. [Northflank][northflank] (direct if its sub-second cold claim holds, else pool). Claims
-   sub-second cold + snapshot resume; cheapest scale-to-zero compute at ~$0.05/
-   container-hr ($0.01667/vCPU-hr + $0.00833/GiB-hr), $0 base. Blocked: the provided
-   token is free-tier with no payment method (cannot provision, 409). Storage type
-   unconfirmed.
-3. [Hetzner][hetzner] / bare NVMe VM (direct). Expected ~1s cold start (local NVMe, image
+2. [Hetzner][hetzner] / bare NVMe VM (direct). Expected ~1s cold start (local NVMe, image
    pre-cached), matching the local baseline. No pool needed, zero idle cost. Cost is
    per-VM fixed, not per-container: a CCX23 (4 vCPU / 16 GiB, ~$32/mo) packs ~6
    containers ≈ ~$0.007/container-hr if fully packed, but it does not scale to zero.
    Pending an HCLOUD_TOKEN to confirm.
-4. [Cloudflare Containers][cloudflare-containers] (direct only). 2-3s cold and no memory snapshot, so a pool
+3. [Cloudflare Containers][cloudflare-containers] (direct only). 2-3s cold and no memory snapshot, so a pool
    cannot help. Cost ~$0.043/container-hr net + a $5/mo Workers Paid base fee.
+
+Northflank was in this list (claimed sub-second cold, ~$0.05/container-hr). It is
+now measured: the sub-second-cold claim does not hold for this workload (~16s p50
+cold), and there is no snapshot resume. See the results below and
+`bench/northflank/REPORT-northflank.md`.
 
 ## Methodology
 
@@ -97,7 +106,11 @@ Per run, wall-clock from the start/resume trigger until CDP is ready
 is out of scope. Each platform ran 10 runs per mode and reports p50/p95/min/max.
 The container image was pre-cached on the execution host in every case, so
 image-pull time is excluded from the numbers. Raw logs and the per-platform
-scripts live under `bench/fly/`, `bench/modal/`, `bench/daytona/`, `bench/e2b/`.
+scripts live under `bench/fly/`, `bench/modal/`, `bench/daytona/`, `bench/e2b/`,
+`bench/northflank/`. (Northflank is the exception to "image pre-cached on the
+execution host": there is no host we control, but the image is pulled once on
+first deploy and stays cached on the node across scale cycles, so per-run pull is
+still excluded.)
 
 ### Terminology
 
@@ -170,6 +183,13 @@ the fixed harness. n=10 per cell. Rows ordered by resume internal p50.
 | E2B      | amd64 | Firecracker 2vCPU/2GiB | local NVMe (microVM spawn ~0.64s) | 24233 / 32495 (slow-node day) | n/a (no usable external path) | 2233 / 3355        | n/a                |
 | Modal    | amd64 | Sandbox 2vCPU/2GiB | gVisor overlay (not NVMe)         | 3868 / 8291      | 4676 / 9458      | 2985 / 4354        | 3634 / 5039        |
 | Fly.io   | amd64 | shared-4x / 2GB | unverified | 5058 / 5908 | 5161 / 6776 | 1748 / 4833 | 1938 / 5030 |
+| Northflank | amd64 | 2 vCPU / 4 GiB | unconfirmed (exec unavailable) | n/a (no internal probe) | 15858 / 33069 | n/a (no memory resume) | n/a |
+
+Northflank (measured 2026-06-05, not part of the 2026-05-28 rerun) has only a
+public-edge cold number: the `*.code.run` ingress flips 503->500 (Chrome's
+Host-reject) the moment CDP is up, which the bench times. There is no internal
+number (exec returns HTTP 500) and no resume (plain k8s pods). min 15022 / max
+33069; two runs spiked to ~29-33s on cross-node reschedule.
 
 Read this table with the terminology section in mind. The "primary" number
 for each platform decision is the column that bypasses platform-specific
@@ -186,6 +206,10 @@ public-edge noise:
   either. Cold this run is ~5s (variance: prior rerun showed external 2.3s
   on a different worker). Resume p50 1.7s, p95 4.8s, min 1.6s — close to
   the 2026-05-27 original (1.0s / 1.4s).
+- Northflank: only the public-edge number exists. It is the genuine access
+  path (Northflank has no internal exec and CDP is reached through the ingress),
+  so there is no proxy-vs-internal decomposition to read here; ~16s is pod
+  schedule + adapted-boot Chrome launch + ingress attach.
 
 Cost (compute only, 2 vCPU / 2 GiB), with the scale-to-zero / base-fee lens:
 
@@ -195,6 +219,12 @@ Cost (compute only, 2 vCPU / 2 GiB), with the scale-to-zero / base-fee lens:
 | Modal    | ~$0.19 (Sandbox tier) | $19.03 (~$0 net) | $190.3 ($160.3 net) | $0 + $30/mo credit | Yes |
 | Daytona  | $0.1332        | $13.32        | $133.20        | $0 (+$200 credit) | Yes (compute) |
 | E2B      | $0.1332        | $163 (incl base) | $283 (incl base) | $150/mo Pro (mandatory for prod) | No (base fee disqualifies) |
+| Northflank | $0.067 (2 vCPU / 4 GiB) | $6.70  | $67            | $0              | Yes (compute; scaled-to-0 = $0) |
+
+Northflank has no 2 vCPU / 2 GiB tier (4 GiB is the min RAM at 2 vCPU), so its
+row is the 4 GiB plan and not strictly comparable to the others' 2 GiB. Even so
+it is the second-cheapest measured (after Fly) with a $0 base fee; cost is not
+its problem, the ~16s cold is.
 
 ## Per-platform findings
 
@@ -369,6 +399,44 @@ Follow-up question asked in this session:
   Firecracker template snapshot; `Sandbox.create` restores it in ~0.40s with no
   per-spawn pull. So the cold number is Chrome boot, not image fetch.
 
+### [Northflank][northflank]
+
+Measured 2026-06-05 on a billed team (the earlier free-tier token's 409 is gone),
+project `remote-browser`, us-central (GCP), n=10, cold only:
+
+- External (public-edge) CDP cold p50 15858ms / p95 33069ms (min 15022, max 33069)
+- No internal number (exec backend returns HTTP 500), no resume (plain k8s pods)
+
+Slowest cold of any working platform. Three findings dominate:
+
+- Adapted boot REQUIRED. Northflank runs the container as PID 2 under its own
+  `env-injector` PID-1 shim (no opt-out) and grants only the default Docker caps
+  (no `CAP_SYS_ADMIN`), so `unshare(CLONE_NEWPID)` fails ("Operation not
+  permitted") and the s6 stock/daytona images crash-loop. Same blocker as Modal.
+  Fixed by clearing the entrypoint and launching the services directly (Modal's
+  adapted-boot recipe, delivered here as a base64 command override, no image
+  change). Northflank exposes no capabilities/privileged/securityContext field.
+- No clean CDP readiness channel. Public ports are HTTP/HTTP2 only (the ports API
+  rejects TCP), and the ingress forwards the public Host, which Chrome's CDP
+  rejects (HTTP 500, the E2B/Modal Host-header limitation). Readiness is measured
+  as the ingress flipping 503 (no upstream) -> Chrome HTTP response, which the
+  `cdp-proxy` socat gates on Chrome's `:9221` being up. The per-port `*.code.run`
+  DNS was also flaky to resolve, so the probe pins the LB IP with `--resolve`.
+- ~16s cold decomposes (instrumented-boot timestamps) as ~11s pod cold-start
+  (k8s schedule + container create + env-injector, before the app runs) + ~0.9s
+  boot script to Chrome + ~3-4s Chrome-CDP/ingress. The ~11s pod-start is ~70% of
+  the total and is the reason it is ~8x Daytona, whose stop/start is a warm
+  container restart (~1.1s) rather than a fresh pod. The ~33s p95 is cross-node
+  reschedule on scale 0->1.
+- That ~11s is per-pod, not a scale-from-zero penalty: scaling a warm service
+  1->2 schedules the new replica in ~11.7s, same as 0->1's ~10.5s. So a
+  pre-warmed replica pool would not add capacity faster; only an already-running
+  instance (idle cost) or a memory snapshot (which Northflank lacks) hides it.
+- "Sandboxes" are not a faster path: on the managed cloud microVM isolation is
+  the default and a sandbox is just a deployment service, so this run already was
+  one. The stock image still crash-loops as a sandbox (PID 2 under env-injector,
+  no CAP_SYS_ADMIN), so the adapted boot stays required and latency is unchanged.
+
 ## Read so far
 
 - Internal CDP resume ranking (primary signal, p50): Fly 1.7s, Daytona 2.1s,
@@ -382,12 +450,15 @@ Follow-up question asked in this session:
 - A cross-cutting integration finding: the stock s6 image's PID-1 requirement
   breaks on every platform that does not give the container PID 1 with
   CAP_SYS_ADMIN. Daytona and E2B needed `unshare` workarounds (E2B via a
-  post-create launch since its start-command lacks the cap); Modal could not do it
-  at all (gVisor denies the unshare). Any non-Fly target needs an image change here.
+  post-create launch since its start-command lacks the cap); Modal and Northflank
+  could not unshare at all (Modal: gVisor denies it; Northflank: no CAP_SYS_ADMIN
+  + a forced PID-1 injector), so both need the adapted boot that launches the
+  services directly. Any non-Fly target needs an image change here.
 - A second cross-cutting finding: CDP (`:9222`) is rejected by Chrome through a
   public proxy because of the non-localhost Host header (hit on E2B; Modal needed a
-  `Host: localhost` curl header through its tunnel). Exposing CDP publicly needs a
-  Host-rewriting sidecar.
+  `Host: localhost` curl header through its tunnel; Northflank's HTTP-only ingress
+  can't override Host so it gets a 500 and we read the 503->500 flip instead).
+  Exposing CDP publicly needs a Host-rewriting sidecar.
 
 ## Approach recommendation per platform
 
@@ -419,6 +490,7 @@ Decision rule:
 | Daytona  | 2.0s internal (4.7s via preview proxy) | direct create ~2s, resume ~2s | n/a (no pool) | direct (+ custom network) |
 | E2B      | 24s today (10s typical) | resume ~2.2s | free while paused | pool |
 | Modal    | 3.9s | snapshot resume 3.0s | $0 snapshotted | pool |
+| Northflank | 15.9s ext (no internal) | cold only (no resume) | running compute (no cheap suspend) | neither fits well |
 
 Notes:
 
@@ -439,19 +511,27 @@ Notes:
 - Modal: snapshot resume is 3.0s, the slowest of the tested platforms. A
   pool of already-running sandboxes could cut the boot but tunnel RTT + gVisor
   marginal, and running standby costs ~$0.19/hr each.
+- Northflank: ~16s cold and no memory snapshot, so direct inherits the full ~16s
+  and a pool can't be cheap (deployment standbys must stay scaled to >=1, i.e.
+  running compute). Neither approach fits the latency + scale-to-zero goal, so
+  Northflank is out despite the low price.
 
 Bottom line: direct for fast-cold hosts (Hetzner / bare NVMe VMs) and for Daytona
 (~2s, with a custom network); pool for Fly.io (the only cheap-suspend platform).
-E2B would work as a pool but is disqualified on cost; Modal is the slowest tested.
+E2B would work as a pool but is disqualified on cost; Modal is the slowest of the
+snapshot platforms; Northflank is the slowest overall (~16s cold, no resume).
 
 ## Pending / blocked platforms
 
 | Platform        | Status                                                                 |
 | --------------- | ---------------------------------------------------------------------- |
 | Hetzner (NVMe baseline) | Pending. Needs HCLOUD_TOKEN. This is the local-NVMe lower-bound reference. |
-| Northflank      | Blocked. The provided token is free-tier with no payment method; cannot provision services (409). Script left in its worktree. |
 | Koyeb           | Pending. Needs a Koyeb token; also resolve the real CPU container rate and whether the ~$29/mo plan is mandatory. |
 | Cloudflare      | Pending. Needs Workers Paid ($5/mo) + wrangler. No memory snapshot, so cold-only; expected 2-3s cold. |
+
+Northflank is no longer blocked: measured 2026-06-05 on a billed team (see the
+results above and `bench/northflank/REPORT-northflank.md`). The earlier 409 was a
+free-tier token with no payment method.
 
 To finish these, supply the relevant credentials and re-run the per-platform
 script (see each session's worktree and `bench/README.md`).

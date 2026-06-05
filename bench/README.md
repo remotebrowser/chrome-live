@@ -23,8 +23,8 @@ factor, so every result records the storage type.
         REPORT-<platform>.md per-platform writeup
         run-*.log            raw output captured during the run
 
-Completed: `fly/`, `modal/`, `daytona/`, `e2b/`. Pending: `hetzner-local/`,
-`northflank/`, `koyeb/`, `cloudflare/`.
+Completed: `fly/`, `modal/`, `daytona/`, `e2b/`, `northflank/`. Pending:
+`hetzner-local/`, `koyeb/`, `cloudflare/`.
 
 ## What each run measures
 
@@ -67,7 +67,7 @@ your `.env` lives elsewhere.
 | [modal][modal]                                      | `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`          | Stock s6 image does not boot on Modal; the bench uses an adapted launch. |
 | [daytona][daytona]                                  | `DAYTONA_API_KEY`                               | Image needs an entrypoint override (`unshare --pid --fork --mount-proc /init`) baked in. |
 | [e2b][e2b]                                          | `E2B_API_KEY`                                   | Template is built via `e2b_build.py` (SDK Build System 2.0). `E2B_ACCESS_TOKEN` is needed only for `e2b template delete`. |
-| [northflank][northflank]                            | Northflank API token / CLI                     | Pending; free-tier tokens cannot provision (HTTP 409). |
+| [northflank][northflank]                            | `NORTHFLANK_API_TOKEN` (repo-root `.env`)       | Billed team required (free-tier tokens 409). Stock/daytona images can't boot (no CAP_SYS_ADMIN); uses a Modal-style adapted boot. |
 | [koyeb][koyeb]                                      | Koyeb API token                                 | Pending. |
 | [cloudflare][cloudflare-containers]                 | Cloudflare account, Workers Paid + `wrangler`  | Pending. |
 | [hetzner-local][hetzner]                            | `HCLOUD_TOKEN`                              | Pending. Provisions and destroys a Cloud VM per run. |
@@ -139,6 +139,26 @@ E2B's template build is the slow step (one-time, image is baked into a
 Firecracker snapshot). Subsequent sandbox creates are ~0.4s of restore + boot.
 CDP is measured intra-sandbox because E2B's public proxy rewrites the `Host`
 header in a way Chrome's DevTools endpoint rejects.
+
+### [Northflank][northflank]
+
+Pure bash + `curl` against the REST API (no SDK). Needs `NORTHFLANK_API_TOKEN`
+from a billed team in the repo-root `/Users/bin/dev/chrome-live/.env`. In a git
+worktree the root `.env` is absent, so pass `ENV_FILE` explicitly:
+
+    ENV_FILE=/Users/bin/dev/chrome-live/.env MODE=cold COUNT=10 READY_TIMEOUT=180 \
+      BENCH_TIMEOUT=1800 bash bench/northflank/northflank.sh 2>&1 | tee bench/northflank/run-cold.log
+
+Cold only (no memory-snapshot resume; `MODE=resume` exits). The script creates one
+deployment service in project `remote-browser`, scales it 0<->1 per run, and
+deletes it on teardown (the project is left intact). The stock and `chrome-live-daytona`
+images cannot boot here (Northflank runs the container as PID 2 with no
+`CAP_SYS_ADMIN`, so the s6 `unshare` entrypoint fails), so the script uses the
+Modal-style adapted boot (clear entrypoint, launch the services directly) via a
+command override. CDP readiness is read at the public `*.code.run` ingress: HTTP-only
+public ports + Chrome's Host-header check mean no literal `/json/version` 200, so the
+probe times the 503->Chrome-HTTP flip (the `cdp-proxy` socat comes up only once CDP
+is ready). See `bench/northflank/REPORT-northflank.md`.
 
 ## Adding a new platform
 

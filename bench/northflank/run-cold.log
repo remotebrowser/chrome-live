@@ -1,0 +1,52 @@
+[bench] platform=northflank mode=cold count=10 timeout=180s poll=0.2s wall=1800s
+[setup] running bp_setup
+[setup] removing leftover chrome-live-bench
+[setup] load balancer IP: 35.188.57.196
+[setup] creating deployment service chrome-live-bench (nf-compute-200-4, adapted boot) from ghcr.io/remotebrowser/chrome-live@sha256:08c3b92806d704f77aef19465ae69e83efa2ff0bf4eb9b7835b055d4e4f65a49
+[setup] CDP public URL:   https://cdp--chrome-live-bench--k8f9gbvvtk5q.code.run
+[setup] noVNC public URL: https://novnc--chrome-live-bench--k8f9gbvvtk5q.code.run (informational)
+[setup] waiting for first boot (CDP via ingress)
+[setup] first boot OK (CDP responding through ingress)
+[run 1/10] prep: cold-stopped
+[run 1/10] trigger (cold start)
+[run 1/10] cdp external ready in 18142ms
+[run 1/10] novnc ready in 18452ms (informational)
+[run 2/10] prep: cold-stopped
+[run 2/10] trigger (cold start)
+[run 2/10] cdp external ready in 15564ms
+[run 2/10] novnc ready in 15873ms (informational)
+[run 3/10] prep: cold-stopped
+[run 3/10] trigger (cold start)
+[run 3/10] cdp external ready in 33069ms
+[run 3/10] novnc ready in 33373ms (informational)
+[run 4/10] prep: cold-stopped
+[run 4/10] trigger (cold start)
+[run 4/10] cdp external ready in 15821ms
+[run 4/10] novnc ready in 16105ms (informational)
+[run 5/10] prep: cold-stopped
+[run 5/10] trigger (cold start)
+[run 5/10] cdp external ready in 28930ms
+[run 5/10] novnc ready in 29189ms (informational)
+[run 6/10] prep: cold-stopped
+[run 6/10] trigger (cold start)
+[run 6/10] cdp external ready in 15224ms
+[run 6/10] novnc ready in 15516ms (informational)
+[run 7/10] prep: cold-stopped
+[run 7/10] trigger (cold start)
+[run 7/10] cdp external ready in 15022ms
+[run 7/10] novnc ready in 15385ms (informational)
+[run 8/10] prep: cold-stopped
+[run 8/10] trigger (cold start)
+[run 8/10] cdp external ready in 17511ms
+[run 8/10] novnc ready in 17804ms (informational)
+[run 9/10] prep: cold-stopped
+[run 9/10] trigger (cold start)
+[run 9/10] cdp external ready in 15953ms
+[run 9/10] novnc ready in 16234ms (informational)
+[run 10/10] prep: cold-stopped
+[run 10/10] trigger (cold start)
+[run 10/10] cdp external ready in 15858ms
+[run 10/10] novnc ready in 16102ms (informational)
+[result] CDP external n=10 p50=15858ms p95=33069ms min=15022ms max=33069ms
+[teardown] running bp_teardown
+[teardown] deleted service chrome-live-bench
