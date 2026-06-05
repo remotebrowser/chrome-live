@@ -1,0 +1,20 @@
+# Daytona-backend variant of chrome-live. Two Daytona-specific needs:
+#   1. s6-overlay must be PID 1, but Daytona overrides the image ENTRYPOINT with its own
+#      daemon, so declare the unshare wrapper that nests s6 in its own PID namespace.
+#   2. noVNC's :80 is outside Daytona's previewable 3000-9999 range, so forward :8080 -> :80.
+# CDP needs no customization: the base image already serves it on 0.0.0.0:9222, which is
+# what a consumer reaches via a Daytona signed preview URL (Daytona blocks outbound UDP,
+# so a WireGuard tunnel to the sandbox is not an option). See daytona/README.md. Pin
+# BASE_IMAGE to a digest for production.
+ARG BASE_IMAGE=ghcr.io/remotebrowser/chrome-live:latest
+FROM ${BASE_IMAGE}
+
+# noVNC :8080 -> :80 forwarder, overlaid onto the base s6-rc.d tree (COPY merges).
+COPY daytona/root/ /
+RUN chmod +x /etc/s6-overlay/s6-rc.d/novnc-fwd/run
+
+EXPOSE 8080
+
+# Daytona overrides ENTRYPOINT, and s6-overlay refuses to run unless PID 1, so declare the
+# unshare wrapper (the sandbox has CAP_SYS_ADMIN). Mirrors start-init.sh's Fly path.
+ENTRYPOINT ["/usr/bin/unshare","--pid","--fork","--mount-proc","/init"]

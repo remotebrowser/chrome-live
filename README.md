@@ -52,6 +52,11 @@ FLY_IP=$(fly ips list -a test-chrome-live --json | jq -r '.[] | select(.Type=="v
 curl http://$FLY_IP:9222/json/list
 ```
 
+## Daytona backend
+
+A variant for running on Daytona, reached via a Daytona signed preview URL to CDP
+on `:9222`. See [daytona/README.md](daytona/README.md).
+
 ## Provider startup benchmarks
 
 Measured cold-boot and resume latency for chrome-live on several hosting
