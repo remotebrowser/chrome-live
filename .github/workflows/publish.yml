@@ -60,8 +60,6 @@ jobs:
             token_secret: FLY_API_TOKEN_DEV
           - app: keep-chrome-live-ci
             token_secret: FLY_API_TOKEN_CI
-          - app: keep-chrome-live-oss
-            token_secret: FLY_API_TOKEN_OSS
     steps:
       - name: Push to Fly registry
         uses: remotebrowser/shared-github-actions/push-fly-image@v1
