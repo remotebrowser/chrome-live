@@ -1,0 +1,32 @@
+# CloakBrowser variant of chrome-live.
+#
+# Replaces google-chrome-stable with CloakBrowser's stealth Chromium binary
+# (58 C++ source-level patches — bypasses Cloudflare Turnstile, reCAPTCHA v3,
+# FingerprintJS, DataDome, etc.). All other services (Xvnc, noVNC, tinyproxy,
+# cdp-proxy, browser-trace) are unchanged — VNC and CDP on :80/:5900/:9222
+# work identically to the base image.
+#
+# NOTE: amd64 only — CloakBrowser does not publish an arm64 binary.
+# Pin BASE_IMAGE to a digest for production.
+ARG BASE_IMAGE=ghcr.io/remotebrowser/chrome-live:latest
+FROM --platform=linux/amd64 ${BASE_IMAGE}
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    python3-pip \
+    libgl1 \
+    libgl1-mesa-dri \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cloakbrowser Python package, pre-download the patched Chromium binary,
+# then move it to a world-readable path so the unprivileged 'user' s6 service can exec it.
+RUN pip3 install --break-system-packages cloakbrowser && \
+    python3 -m cloakbrowser install && \
+    CLOAK_DIR=$(find /root -name "chrome" -path "*cloakbrowser*" -type f 2>/dev/null | head -1 | xargs dirname) && \
+    echo "CloakBrowser dir: ${CLOAK_DIR}" && \
+    cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
+    chmod 755 /usr/local/lib/cloakbrowser/chrome && \
+    ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser
+
+# Override chromium s6 service — all other services inherited from base image.
+COPY cloakbrowser/root/ /
+RUN chmod +x /etc/s6-overlay/s6-rc.d/chromium/run
