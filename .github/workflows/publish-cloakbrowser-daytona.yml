@@ -13,6 +13,9 @@ on:
     workflows: ["Publish CloakBrowser Image"]
     types: [completed]
   workflow_dispatch:
+  # TEMPORARY: test the publish from the feature branch before merge. Remove before merging.
+  push:
+    branches: [feat/cloakbrowser-variant]
 
 env:
   REGISTRY: ghcr.io
@@ -22,7 +25,7 @@ jobs:
 
   publish-cloakbrowser-daytona-image:
     # Skip if the upstream publish failed (workflow_run always fires, even on failure).
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
