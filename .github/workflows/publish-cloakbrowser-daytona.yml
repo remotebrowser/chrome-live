@@ -1,0 +1,187 @@
+name: Publish CloakBrowser Daytona Snapshot
+
+# Runs after the CloakBrowser image workflow finishes, so Dockerfile.daytona builds FROM a
+# fresh chrome-live-cloakbrowser:latest. Also runnable manually.
+#
+#   chrome-live-cloakbrowser-daytona = chrome-live-cloakbrowser + Dockerfile.daytona
+#
+# The daytona overlay is base-agnostic (noVNC :8080->:80 forwarder + unshare entrypoint), so
+# the combo reuses Dockerfile.daytona with BASE_IMAGE pointed at the cloak image — no new
+# Dockerfile. amd64 only.
+on:
+  workflow_run:
+    workflows: ["Publish CloakBrowser Image"]
+    types: [completed]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+
+  publish-cloakbrowser-daytona-image:
+    # Skip if the upstream publish failed (workflow_run always fires, even on failure).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push CloakBrowser Daytona image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.daytona
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cloakbrowser:latest
+          # SHA tag too: `snapshot create --image` needs a name:tag ref (rejects :latest and
+          # @digest), so the lambda job references the SHA tag.
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cloakbrowser-daytona:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cloakbrowser-daytona:${{ github.sha }}
+
+  publish-cloakbrowser-daytona:
+    needs: publish-cloakbrowser-daytona-image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Daytona CLI
+        run: |
+          sudo curl -fL https://github.com/daytonaio/daytona/releases/latest/download/daytona-linux-amd64 \
+            -o /usr/local/bin/daytona
+          sudo chmod +x /usr/local/bin/daytona
+          daytona version
+
+      - name: Authenticate Daytona CLI
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        # `snapshot push` requires a stored profile; the API-key env alone is not enough.
+        run: daytona login --api-key "$DAYTONA_API_KEY"
+
+      - name: Push snapshot to Daytona
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cloakbrowser-daytona:latest
+          # Pin amd64: the snapshot must be amd64 (Daytona's host), and this keeps the pull
+          # correct on an arm64 host too (e.g. local `act` on Apple Silicon).
+          docker pull --platform linux/amd64 "$IMAGE"
+          # `snapshot push` rejects a source image tagged ':latest', so re-tag locally to a
+          # specific tag (the commit SHA). This local tag need not exist on the registry.
+          SRC="chrome-live-cloakbrowser-daytona:${GITHUB_SHA:0:12}"
+          [ "$SRC" = "chrome-live-cloakbrowser-daytona:" ] && SRC="chrome-live-cloakbrowser-daytona:build"
+          docker tag "$IMAGE" "$SRC"
+          # Stable snapshot name. `snapshot push` refuses an existing name (no --force) and
+          # `snapshot delete` is asynchronous, so delete the old one, then retry ONLY while the
+          # name is still occupied. Fail fast on any other error. The Dockerfile ENTRYPOINT
+          # (unshare wrapper) is preserved by push.
+          yes | daytona snapshot delete chrome-live-cloakbrowser-daytona || true
+          for i in $(seq 1 30); do
+            if out=$(daytona snapshot push "$SRC" --name chrome-live-cloakbrowser-daytona --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Published Daytona snapshot: \`chrome-live-cloakbrowser-daytona\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out" | tail -2
+            if echo "$out" | grep -qi "already exists"; then
+              echo "attempt $i: snapshot still deleting; retrying in 5s..."
+              sleep 5
+            else
+              echo "snapshot push failed with a non-retryable error" >&2
+              exit 1
+            fi
+          done
+          echo "failed to push snapshot chrome-live-cloakbrowser-daytona after retries" >&2
+          exit 1
+
+  publish-cloakbrowser-daytona-lambda:
+    # Self-hosted Daytona instance, reached over the tailnet. Same image and snapshot name as
+    # the cloud job; only the target server differs (DAYTONA_API_URL + a separate API key).
+    needs: publish-cloakbrowser-daytona-image
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      # Self-hosted Daytona on the tailnet. Setting BOTH DAYTONA_API_URL and DAYTONA_API_KEY
+      # makes the CLI use an implicit env profile, so no `daytona login` is needed (login
+      # actually conflicts with env auth: "profile with id env not found"). URL is a tailnet
+      # address, e.g. http://<tailscale-ip>:3000/api . Stored as secrets so a single
+      # `--secret-file .env` works for local `act` too.
+      DAYTONA_API_URL: ${{ secrets.DAYTONA_LAMBDA_API_URL }}
+      DAYTONA_API_KEY: ${{ secrets.DAYTONA_LAMBDA_API_KEY }}
+
+    steps:
+      # The runner must be on the tailnet to reach DAYTONA_API_URL.
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Install Daytona CLI
+        run: |
+          sudo curl -fL https://github.com/daytonaio/daytona/releases/latest/download/daytona-linux-amd64 \
+            -o /usr/local/bin/daytona
+          sudo chmod +x /usr/local/bin/daytona
+          daytona version
+
+      - name: Create snapshot on self-hosted Daytona
+        run: |
+          # The self-hosted instance has no transient registry, so `snapshot push` (local-image
+          # upload) 500s. Use `snapshot create --image`: the instance pulls the published image.
+          # Requires the chrome-live-cloakbrowser-daytona ghcr package to be public (or the
+          # instance has ghcr creds). The ref must be name:tag (the CLI rejects :latest and
+          # @digest), so use the commit-SHA tag. The image's baked ENTRYPOINT (unshare wrapper)
+          # carries into the snapshot (sandbox PID 1 runs `daytona <entrypoint>`).
+          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-cloakbrowser-daytona:${{ github.sha }}
+          # Stable name; delete then retry-create while the name is still occupied (async
+          # delete), fail fast on any other error.
+          yes | daytona snapshot delete chrome-live-cloakbrowser-daytona || true
+          for i in $(seq 1 30); do
+            if out=$(daytona snapshot create chrome-live-cloakbrowser-daytona --image "$IMAGE" --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Created self-hosted Daytona snapshot: \`chrome-live-cloakbrowser-daytona\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out" | tail -3
+            if echo "$out" | grep -qi "already exists"; then
+              echo "attempt $i: snapshot still deleting; retrying in 5s..."
+              sleep 5
+            else
+              echo "snapshot create failed with a non-retryable error" >&2
+              exit 1
+            fi
+          done
+          echo "failed to create snapshot chrome-live-cloakbrowser-daytona after retries" >&2
+          exit 1
