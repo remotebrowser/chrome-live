@@ -54,8 +54,9 @@ curl http://$FLY_IP:9222/json/list
 
 ## Daytona backend
 
-A variant for running on Daytona, reached via a Daytona signed preview URL to CDP
-on `:9222`. See [daytona/README.md](daytona/README.md).
+The same image also runs on Daytona (a sandbox reached via a Daytona signed preview URL to
+CDP on `:9222`); `start-init.sh` auto-detects Daytona/Fly vs. a plain Docker host at boot.
+See [daytona/README.md](daytona/README.md).
 
 ## Provider startup benchmarks
 

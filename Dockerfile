@@ -89,6 +89,7 @@ RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
 
 EXPOSE 5900
 EXPOSE 80
+EXPOSE 8080
 EXPOSE 9222
 
 RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1/hblock' \
