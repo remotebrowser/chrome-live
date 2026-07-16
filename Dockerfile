@@ -128,7 +128,7 @@ COPY switch-browser.sh /usr/local/bin/switch-browser
 RUN chmod +x /usr/local/bin/switch-browser
 
 RUN useradd -M -d /home/user -s /bin/bash user && \
-    mkdir -p /home/user/chrome-profile /home/user/cloak-profile && \
+    mkdir -p /home/user/chrome-profile && \
     chown -R user:user /app /home/user && \
     usermod -aG sudo user && \
     echo 'user ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers

@@ -9,12 +9,15 @@ export DISPLAY=${DISPLAY:-:99}
 STATE_FILE=/home/user/.active-browser
 ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo chrome)
 
-# Flags shared by both browsers.
+# Flags shared by both browsers. Both use the same profile dir and route through
+# tinyproxy (:8119), so the residential-proxy / egress-IP flow is identical
+# regardless of which browser is active.
 COMMON="--start-maximized --no-sandbox --no-first-run --disable-default-apps \
 --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage \
 --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction \
 --disable-background-networking --disable-component-update --disable-domain-reliability \
---disable-sync --no-pings --enable-logging=stderr --log-level=3"
+--disable-sync --no-pings --enable-logging=stderr --log-level=3 \
+--user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119"
 
 if [ "$ACTIVE" = "cloak" ] && ! command -v cloak-browser >/dev/null 2>&1; then
   echo "chromium: CloakBrowser not installed (amd64 only) — falling back to Chrome" >&2
@@ -25,13 +28,10 @@ if [ "$ACTIVE" = "cloak" ]; then
   exec s6-setuidgid user cloak-browser $COMMON \
     --fingerprint-platform=windows \
     --use-gl=swiftshader \
-    --user-data-dir=/home/user/cloak-profile \
     about:blank
 else
   exec s6-setuidgid user google-chrome-stable $COMMON \
     --disable-gpu \
     --disable-software-rasterizer \
-    --user-data-dir=/home/user/chrome-profile \
-    --proxy-server=http://127.0.0.1:8119 \
     about:blank
 fi
