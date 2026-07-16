@@ -1,15 +1,24 @@
 name: Test Daytona Snapshot (multi-browser)
 
-# Manual-only. Builds the CURRENT branch image and pushes it as a
-# uniquely-named Daytona cloud snapshot for testing, WITHOUT touching the
-# production :latest tag, Fly apps, or the prod `chrome-live-daytona` snapshot.
+# Builds the CURRENT branch image and pushes it as a uniquely-named Daytona
+# cloud snapshot for testing, WITHOUT touching the production :latest tag, Fly
+# apps, or the prod `chrome-live-daytona` snapshot.
+#
+# Runs on every push to feat/cloakbrowser-variant (so it works without the file
+# being on the default branch), and can also be dispatched manually.
 on:
+  push:
+    branches: [feat/cloakbrowser-variant]
   workflow_dispatch:
     inputs:
       snapshot_name:
         description: "Daytona snapshot name to publish"
         required: true
         default: "chrome-live-daytona-multi"
+
+env:
+  # push events have no inputs; default the snapshot name here.
+  SNAPSHOT_NAME: ${{ github.event.inputs.snapshot_name || 'chrome-live-daytona-multi' }}
 
 jobs:
   test-daytona-multi:
@@ -48,7 +57,7 @@ jobs:
 
       - name: Push test snapshot to Daytona
         env:
-          NAME: ${{ github.event.inputs.snapshot_name }}
+          NAME: ${{ env.SNAPSHOT_NAME }}
         run: |
           # snapshot push refuses an existing name (no --force) and delete is async,
           # so delete then retry-push only while the name is still occupied.
