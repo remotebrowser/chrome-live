@@ -6,8 +6,11 @@ export DISPLAY=${DISPLAY:-:99}
 # writes chrome|cloak to this file and restarts this service, so the same CDP
 # endpoint (:9221) is served by whichever browser is active — browser-trace and
 # cdp-proxy are unaffected.
+# Precedence: the state file (written by `switch-browser` for mid-session swaps) wins when present;
+# otherwise the ACTIVE_BROWSER env var (set at sandbox-create time) selects the browser on first
+# boot, so a fresh sandbox can start straight into Cloak without a post-start swap; default chrome.
 STATE_FILE=/home/user/.active-browser
-ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo chrome)
+ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo "${ACTIVE_BROWSER:-chrome}")
 
 # Flags shared by both browsers. Both use the same profile dir and route through
 # tinyproxy (:8119), so the residential-proxy / egress-IP flow is identical
