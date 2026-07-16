@@ -60,6 +60,25 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 
 RUN apt-get update && apt-get install -y google-chrome-stable
 
+# Install CloakBrowser alongside Google Chrome (amd64 only — no arm64 binary
+# published). Both browsers live in the same image; the chromium s6 service
+# picks which one to launch at runtime (default: google-chrome-stable). On
+# arm64 this step is a no-op and only Chrome is available.
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+      apt-get update -y && apt-get install -y --no-install-recommends \
+        python3-pip libgl1 libgl1-mesa-dri && \
+      pip3 install --break-system-packages cloakbrowser && \
+      python3 -m cloakbrowser install && \
+      CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname) && \
+      echo "CloakBrowser dir: ${CLOAK_DIR}" && \
+      cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
+      chmod 755 /usr/local/lib/cloakbrowser/chrome && \
+      ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser && \
+      rm -rf /var/lib/apt/lists/* ; \
+    else \
+      echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
+    fi
+
 # Install s6-overlay
 RUN case "${TARGETARCH}" in \
       amd64) S6_ARCH="x86_64" ;; \
@@ -105,8 +124,11 @@ RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download
       -o /usr/local/bin/browser-trace && \
     chmod +x /usr/local/bin/browser-trace
 
+COPY switch-browser.sh /usr/local/bin/switch-browser
+RUN chmod +x /usr/local/bin/switch-browser
+
 RUN useradd -M -d /home/user -s /bin/bash user && \
-    mkdir -p /home/user/chrome-profile && \
+    mkdir -p /home/user/chrome-profile /home/user/cloak-profile && \
     chown -R user:user /app /home/user && \
     usermod -aG sudo user && \
     echo 'user ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
