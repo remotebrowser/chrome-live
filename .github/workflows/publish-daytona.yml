@@ -1,7 +1,7 @@
 name: Publish Daytona Snapshot
 
-# Runs after the base image workflow finishes, so Dockerfile.daytona builds FROM a fresh
-# chrome-live:latest. Also runnable manually.
+# Runs after the base image workflow finishes.
+# Also runnable manually.
 on:
   workflow_run:
     workflows: ["Publish Container Image"]
@@ -14,49 +14,10 @@ env:
 
 jobs:
 
-  publish-daytona-image:
-    # Skip if the upstream publish failed (workflow_run always fires, even on failure).
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Daytona image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile.daytona
-          platforms: linux/amd64
-          push: true
-          build-args: |
-            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # Also tag with the commit SHA: `snapshot create --image` needs a name:tag ref (it
-          # rejects :latest and rejects @digest), so the lambda job references the SHA tag.
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-daytona:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-daytona:${{ github.sha }}
-
   publish-daytona:
-    needs: publish-daytona-image
+    # Skip if the upstream publish failed (workflow_run always fires, even on failure).
+    # On manual workflow_dispatch there is no upstream run, so run unconditionally.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -85,20 +46,24 @@ jobs:
         run: daytona login --api-key "$DAYTONA_API_KEY"
 
       - name: Push snapshot to Daytona
+        env:
+          # workflow_run: the SHA the upstream publish built & tagged. On manual
+          # workflow_dispatch fall back to the dispatch's own SHA.
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-daytona:latest
-          # Pin amd64: the snapshot must be amd64 (Daytona's host), and this keeps the pull
-          # correct on an arm64 host too (e.g. local `act` on Apple Silicon).
+          # The base image is published with both :latest and :<sha> tags. `snapshot
+          # push` rejects a source image tagged ':latest', so pull the :<sha> tag and
+          # re-tag it locally to a short name (this local tag need not exist on the
+          # registry). The image's baked ENTRYPOINT (start-init.sh, which unshare-boots
+          # s6 when it is not PID 1) is preserved by push.
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
           docker pull --platform linux/amd64 "$IMAGE"
-          # `snapshot push` rejects a source image tagged ':latest', so re-tag locally to a
-          # specific tag (the commit SHA). This local tag need not exist on the registry.
-          SRC="chrome-live-daytona:${GITHUB_SHA:0:12}"
-          [ "$SRC" = "chrome-live-daytona:" ] && SRC="chrome-live-daytona:build"
+          SRC="chrome-live:${SHA:0:12}"
+          [ "$SRC" = "chrome-live:" ] && SRC="chrome-live:build"
           docker tag "$IMAGE" "$SRC"
-          # Stable snapshot name. `snapshot push` refuses an existing name (no --force) and
-          # `snapshot delete` is asynchronous, so delete the old one, then retry ONLY while the
-          # name is still occupied. Fail fast on any other error. The Dockerfile ENTRYPOINT
-          # (unshare wrapper) is preserved by push.
+          # Stable snapshot name. `snapshot push` refuses an existing name (no --force)
+          # and `snapshot delete` is asynchronous, so delete the old one, then retry
+          # ONLY while the name is still occupied. Fail fast on any other error.
           yes | daytona snapshot delete chrome-live-daytona || true
           for i in $(seq 1 30); do
             if out=$(daytona snapshot push "$SRC" --name chrome-live-daytona --cpu 2 --memory 2 --disk 10 2>&1); then
@@ -118,9 +83,10 @@ jobs:
           exit 1
 
   publish-daytona-lambda:
-    # Self-hosted Daytona instance, reached over the tailnet. Same image and snapshot name as
-    # the cloud job; only the target server differs (DAYTONA_API_URL + a separate API key).
-    needs: publish-daytona-image
+    # Self-hosted Daytona instance, reached over the tailnet. Same image and
+    # snapshot name as the cloud job; only the target server differs
+    # (DAYTONA_API_URL + a separate API key).
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -153,14 +119,17 @@ jobs:
           daytona version
 
       - name: Create snapshot on self-hosted Daytona
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
-          # The self-hosted instance has no transient registry, so `snapshot push` (local-image
-          # upload) 500s. Use `snapshot create --image`: the instance pulls the published image.
-          # Requires the chrome-live-daytona ghcr package to be public (or the instance has ghcr
-          # creds). The ref must be name:tag (the CLI rejects :latest and rejects @digest), so use
-          # the commit-SHA tag. The image's baked ENTRYPOINT (unshare wrapper) carries into the
-          # snapshot (sandbox PID 1 runs `daytona <entrypoint>`).
-          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-daytona:${{ github.sha }}
+          # The self-hosted instance has no transient registry, so `snapshot push`
+          # (local-image upload) 500s. Use `snapshot create --image`: the instance
+          # pulls the published base image. Requires the chrome-live ghcr package to
+          # be public (or the instance has ghcr creds). The ref must be name:tag
+          # (the CLI rejects :latest and rejects @digest), so use the :<sha> tag the
+          # base workflow publishes. The image's baked ENTRYPOINT (start-init.sh)
+          # carries into the snapshot (sandbox PID 1 runs `daytona <entrypoint>`).
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
           # Stable name; delete then retry-create while the name is still occupied (async
           # delete), fail fast on any other error.
           yes | daytona snapshot delete chrome-live-daytona || true

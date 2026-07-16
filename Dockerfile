@@ -14,6 +14,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     ca-certificates \
+    ffmpeg \
     tinyproxy \
     xterm \
     tigervnc-standalone-server \
@@ -88,6 +89,7 @@ RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
 
 EXPOSE 5900
 EXPOSE 80
+EXPOSE 8080
 EXPOSE 9222
 
 RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1/hblock' \
@@ -99,7 +101,7 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
   && rm -f /tmp/allowlist.txt /tmp/denylist.txt
 
 # Install browser-trace
-RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download/v0.2.0/browser-trace-linux-${TARGETARCH}" \
+RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download/v0.3.6/browser-trace-linux-${TARGETARCH}" \
       -o /usr/local/bin/browser-trace && \
     chmod +x /usr/local/bin/browser-trace
 
