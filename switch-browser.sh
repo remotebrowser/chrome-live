@@ -30,4 +30,4 @@ esac
 
 echo "$1" > "$STATE_FILE"
 echo "active browser -> $1; restarting chromium service"
-s6-svc -r "$SERVICE"
+/command/s6-svc -r "$SERVICE"
