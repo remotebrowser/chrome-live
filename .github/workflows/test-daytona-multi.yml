@@ -1,0 +1,71 @@
+name: Test Daytona Snapshot (multi-browser)
+
+# Manual-only. Builds the CURRENT branch image and pushes it as a
+# uniquely-named Daytona cloud snapshot for testing, WITHOUT touching the
+# production :latest tag, Fly apps, or the prod `chrome-live-daytona` snapshot.
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_name:
+        description: "Daytona snapshot name to publish"
+        required: true
+        default: "chrome-live-daytona-multi"
+
+jobs:
+  test-daytona-multi:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally (amd64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: chrome-live-multi:test
+
+      - name: Install Daytona CLI
+        run: |
+          sudo curl -fL https://github.com/daytonaio/daytona/releases/latest/download/daytona-linux-amd64 \
+            -o /usr/local/bin/daytona
+          sudo chmod +x /usr/local/bin/daytona
+          daytona version
+
+      - name: Authenticate Daytona CLI
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        run: daytona login --api-key "$DAYTONA_API_KEY"
+
+      - name: Push test snapshot to Daytona
+        env:
+          NAME: ${{ github.event.inputs.snapshot_name }}
+        run: |
+          # snapshot push refuses an existing name (no --force) and delete is async,
+          # so delete then retry-push only while the name is still occupied.
+          yes | daytona snapshot delete "$NAME" || true
+          for i in $(seq 1 30); do
+            if out=$(daytona snapshot push chrome-live-multi:test --name "$NAME" --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Published test Daytona snapshot: \`$NAME\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out" | tail -2
+            if echo "$out" | grep -qi "already exists"; then
+              echo "attempt $i: snapshot still deleting; retrying in 5s..."
+              sleep 5
+            else
+              echo "snapshot push failed with a non-retryable error" >&2
+              exit 1
+            fi
+          done
+          echo "failed to push snapshot $NAME after retries" >&2
+          exit 1
