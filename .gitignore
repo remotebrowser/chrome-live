@@ -17,3 +17,6 @@ __pycache__/
 **/.daytona_state
 **/.e2b_state
 **/.fly-state
+
+# Local download cache
+tmp/

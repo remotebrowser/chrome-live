@@ -1,4 +1,40 @@
 #!/command/with-contenv sh
 export HOME=/home/user
 export DISPLAY=${DISPLAY:-:99}
-exec s6-setuidgid user google-chrome-stable --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction --disable-background-networking --disable-component-update --disable-domain-reliability --disable-sync --no-pings --user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119 --enable-logging=stderr --log-level=3 about:blank
+
+# Which browser to launch. Default: google-chrome-stable. `switch-browser`
+# writes chrome|cloak to this file and restarts this service, so the same CDP
+# endpoint (:9221) is served by whichever browser is active — browser-trace and
+# cdp-proxy are unaffected.
+# Precedence: the state file (written by `switch-browser` for mid-session swaps) wins when present;
+# otherwise the ACTIVE_BROWSER env var (set at sandbox-create time) selects the browser on first
+# boot, so a fresh sandbox can start straight into Cloak without a post-start swap; default chrome.
+STATE_FILE=/home/user/.active-browser
+ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo "${ACTIVE_BROWSER:-chrome}")
+
+# Flags shared by both browsers. Both use the same profile dir and route through
+# tinyproxy (:8119), so the residential-proxy / egress-IP flow is identical
+# regardless of which browser is active.
+COMMON="--start-maximized --no-sandbox --no-first-run --disable-default-apps \
+--no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage \
+--disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction \
+--disable-background-networking --disable-component-update --disable-domain-reliability \
+--disable-sync --no-pings --enable-logging=stderr --log-level=3 \
+--user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119"
+
+if [ "$ACTIVE" = "cloak" ] && ! command -v cloak-browser >/dev/null 2>&1; then
+  echo "chromium: CloakBrowser not installed (amd64 only) — falling back to Chrome" >&2
+  ACTIVE=chrome
+fi
+
+if [ "$ACTIVE" = "cloak" ]; then
+  exec s6-setuidgid user cloak-browser $COMMON \
+    --fingerprint-platform=windows \
+    --use-gl=swiftshader \
+    about:blank
+else
+  exec s6-setuidgid user google-chrome-stable $COMMON \
+    --disable-gpu \
+    --disable-software-rasterizer \
+    about:blank
+fi
