@@ -1,4 +1,18 @@
 #!/command/with-contenv sh
 export HOME=/home/user
 export DISPLAY=${DISPLAY:-:99}
-exec s6-setuidgid user google-chrome-stable --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction --disable-background-networking --disable-component-update --disable-domain-reliability --disable-sync --no-pings --user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119 --enable-logging=stderr --log-level=3 about:blank
+
+# Opt-in CAPTCHA solving: load the bundled CapSolver extension only when
+# SOLVE_CAPTCHA=1. The API key is seeded into the extension's config file
+# (not passed on the command line, so it never shows up in `ps`). CapSolver
+# reads the key from chrome.storage and falls back to config.js when storage
+# has none, so this works on a fresh profile (the image bakes one).
+EXT_FLAGS=""
+if [ "${SOLVE_CAPTCHA:-0}" = "1" ] && [ -d /opt/capsolver ]; then
+  if [ -n "${CAPSOLVER_API_KEY:-}" ]; then
+    sed -i "s|apiKey: '[^']*'|apiKey: '${CAPSOLVER_API_KEY}'|" /opt/capsolver/assets/config.js
+  fi
+  EXT_FLAGS="--load-extension=/opt/capsolver --disable-extensions-except=/opt/capsolver"
+fi
+
+exec s6-setuidgid user google-chrome-stable --start-maximized --no-sandbox --no-first-run --disable-default-apps --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction --disable-background-networking --disable-component-update --disable-domain-reliability --disable-sync --no-pings --user-data-dir=/home/user/chrome-profile --proxy-server=http://127.0.0.1:8119 --enable-logging=stderr --log-level=3 $EXT_FLAGS about:blank

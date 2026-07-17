@@ -3,3 +3,6 @@
 # doubleclick.net
 
 cdn4dd.com
+
+# CapSolver CAPTCHA-solver API (only used when SOLVE_CAPTCHA=1).
+api.capsolver.com

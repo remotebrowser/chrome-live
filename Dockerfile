@@ -25,6 +25,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     xfconf \
     tar \
     xz-utils \
+    unzip \
     gtk2-engines-murrine \
     dbus-x11 \
     novnc \
@@ -102,6 +103,15 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
 RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download/v0.2.0/browser-trace-linux-${TARGETARCH}" \
       -o /usr/local/bin/browser-trace && \
     chmod +x /usr/local/bin/browser-trace
+
+# Bundle CapSolver CAPTCHA-solving extension (loaded only when SOLVE_CAPTCHA=1).
+# NOTE: the release tag is "v.1.17.0" (dotted) but the asset filename is
+# "...-chrome-v1.17.0.zip" (no dot) — they differ, so the full URL is pinned literally.
+RUN curl -fsSL "https://github.com/capsolver/capsolver-browser-extension/releases/download/v.1.17.0/CapSolver.Browser.Extension-chrome-v1.17.0.zip" -o /tmp/capsolver.zip \
+  && echo "96e0f13653682d81d61b7107baa5d3031033aa46270e966dede1456eac11413f  /tmp/capsolver.zip" | shasum -a 256 -c \
+  && mkdir -p /opt/capsolver \
+  && (cd /opt/capsolver && unzip -q /tmp/capsolver.zip) \
+  && rm -f /tmp/capsolver.zip
 
 RUN useradd -M -d /home/user -s /bin/bash user && \
     mkdir -p /home/user/chrome-profile && \
