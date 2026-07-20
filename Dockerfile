@@ -1,3 +1,23 @@
+# Build stage: compile browser-trace into a standalone binary with PyInstaller.
+FROM python:3.12-slim AS browser-trace-builder
+
+# PyInstaller shells out to objdump (part of binutils) when analysing binaries
+# on Linux; python:3.12-slim doesn't ship it, so install just that.
+RUN apt-get update -y && apt-get install -y --no-install-recommends binutils && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /src
+COPY browser-trace/pyproject.toml browser-trace/uv.lock browser-trace/.python-version ./
+COPY browser-trace/main.py browser-trace/recording.py ./
+
+# Install the locked runtime deps + the dev group (pyinstaller), then build a
+# onefile binary. `--frozen` keeps the build reproducible against uv.lock.
+RUN uv sync --frozen --group dev
+RUN uv run --group dev pyinstaller --onefile --name browser-trace main.py
+
+
 FROM mirror.gcr.io/library/ubuntu:24.04
 
 ARG TARGETARCH
@@ -121,10 +141,8 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
   && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /tmp/allowlist.txt --denylist /tmp/denylist.txt \
   && rm -f /tmp/allowlist.txt /tmp/denylist.txt
 
-# Install browser-trace
-RUN curl -fsSL "https://github.com/remotebrowser/browser-trace/releases/download/v0.3.6/browser-trace-linux-${TARGETARCH}" \
-      -o /usr/local/bin/browser-trace && \
-    chmod +x /usr/local/bin/browser-trace
+COPY --from=browser-trace-builder /src/dist/browser-trace /usr/local/bin/browser-trace
+RUN chmod +x /usr/local/bin/browser-trace
 
 COPY switch-browser.sh /usr/local/bin/switch-browser
 RUN chmod +x /usr/local/bin/switch-browser
