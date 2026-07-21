@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('captcha_classifier.js', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
