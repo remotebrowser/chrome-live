@@ -86,11 +86,22 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # no arm64 Linux package (the install above already fails on arm64) and
 # CloakBrowser publishes no arm64 binary. The TARGETARCH guard keeps this step a
 # no-op if the image is ever built for another arch.
-RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+#
+# CloakBrowser gates the newest Chromium build behind a license key (free via a
+# GitHub sign-in, or paid). With a key, `install` pulls the latest binary
+# (Chromium 150+); without one it falls back to the anonymous build (Chromium
+# 146). The key arrives via a BuildKit secret (id=cloak_key) so it never lands
+# in an image layer or `docker history`. The secret is OPTIONAL: if it is not
+# provided the `cat` yields an empty key and the build produces the 146 fallback,
+# so the base publish workflow keeps building without it. Pass it with
+# `docker build --secret id=cloak_key,env=CLOAKBROWSER_LICENSE_KEY ...`.
+RUN --mount=type=secret,id=cloak_key \
+    if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
         python3-pip libgl1 libgl1-mesa-dri && \
       pip3 install --break-system-packages cloakbrowser && \
-      python3 -m cloakbrowser install && \
+      CLOAKBROWSER_LICENSE_KEY="$(cat /run/secrets/cloak_key 2>/dev/null || true)" \
+        python3 -m cloakbrowser install && \
       CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname) && \
       echo "CloakBrowser dir: ${CLOAK_DIR}" && \
       cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \

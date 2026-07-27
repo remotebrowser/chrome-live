@@ -1,0 +1,185 @@
+name: Publish Daytona Snapshot (CloakBrowser key)
+
+# Builds the image with a CloakBrowser license key baked in at install time, so
+# `cloakbrowser install` pulls the newest Chromium build (150+) instead of the
+# anonymous 146 fallback, then publishes it as the Daytona snapshot
+# `chrome-live-daytona-with-key`.
+#
+# Manual only. Unlike the keyless publish-daytona.yml (which reuses the base
+# image published by "Publish Container Image"), this variant must build the
+# Dockerfile itself so it can inject the key via a BuildKit secret. The key never
+# lands in an image layer or `docker history`.
+#
+# Required extra secret (beyond the ones publish-daytona.yml already needs):
+#   CLOAKBROWSER_LICENSE_KEY  free via `cloakbrowser login` / cloakbrowser.dev/free, or paid
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Distinct ghcr package so the keyed image never overwrites the base one.
+  IMAGE_NAME: ${{ github.repository }}-daytona-with-key
+  SNAPSHOT_NAME: chrome-live-daytona-with-key
+
+jobs:
+
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          # BuildKit secret consumed by the Dockerfile's `--mount=type=secret,id=cloak_key`.
+          # env= reads the value from the runner env, so it never touches disk or logs.
+          secrets: |
+            cloak_key=${{ secrets.CLOAKBROWSER_LICENSE_KEY }}
+          # `:latest` for human pulls; `:<sha>` so `snapshot create --image` can
+          # reference a specific tag (Daytona rejects `:latest` and `@digest`).
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  publish-daytona:
+    # Daytona Cloud. Pulls the pushed ghcr image, then `snapshot push` (the cloud
+    # has a transient registry, so local-image upload works there).
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Daytona CLI
+        run: |
+          sudo curl -fL https://github.com/daytonaio/daytona/releases/latest/download/daytona-linux-amd64 \
+            -o /usr/local/bin/daytona
+          sudo chmod +x /usr/local/bin/daytona
+          daytona version
+
+      - name: Authenticate Daytona CLI
+        env:
+          DAYTONA_API_KEY: ${{ secrets.DAYTONA_API_KEY }}
+        # `snapshot push` requires a stored profile; the API-key env alone is not enough.
+        run: daytona login --api-key "$DAYTONA_API_KEY"
+
+      - name: Push snapshot to Daytona
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # `snapshot push` rejects a source image tagged ':latest', so pull the
+          # :<sha> tag and re-tag it locally to a short name. The image's baked
+          # ENTRYPOINT (start-init.sh, which unshare-boots s6 when not PID 1) is
+          # preserved by push.
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
+          docker pull --platform linux/amd64 "$IMAGE"
+          SRC="${SNAPSHOT_NAME}:${SHA:0:12}"
+          [ "$SRC" = "${SNAPSHOT_NAME}:" ] && SRC="${SNAPSHOT_NAME}:build"
+          docker tag "$IMAGE" "$SRC"
+          # Stable snapshot name. `snapshot push` refuses an existing name (no
+          # --force) and `snapshot delete` is asynchronous, so delete the old one,
+          # then retry ONLY while the name is still occupied. Fail fast otherwise.
+          yes | daytona snapshot delete "$SNAPSHOT_NAME" || true
+          for i in $(seq 1 30); do
+            if out=$(daytona snapshot push "$SRC" --name "$SNAPSHOT_NAME" --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Published Daytona snapshot: \`${SNAPSHOT_NAME}\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out" | tail -2
+            if echo "$out" | grep -qi "already exists"; then
+              echo "attempt $i: snapshot still deleting; retrying in 5s..."
+              sleep 5
+            else
+              echo "snapshot push failed with a non-retryable error" >&2
+              exit 1
+            fi
+          done
+          echo "failed to push snapshot ${SNAPSHOT_NAME} after retries" >&2
+          exit 1
+
+  publish-daytona-lambda:
+    # Self-hosted Daytona instance, reached over the tailnet. Same image and
+    # snapshot name as the cloud job; only the target server differs.
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      # Setting BOTH DAYTONA_API_URL and DAYTONA_API_KEY makes the CLI use an
+      # implicit env profile, so no `daytona login` is needed (login conflicts
+      # with env auth: "profile with id env not found").
+      DAYTONA_API_URL: ${{ secrets.DAYTONA_LAMBDA_API_URL }}
+      DAYTONA_API_KEY: ${{ secrets.DAYTONA_LAMBDA_API_KEY }}
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Install Daytona CLI
+        run: |
+          sudo curl -fL https://github.com/daytonaio/daytona/releases/latest/download/daytona-linux-amd64 \
+            -o /usr/local/bin/daytona
+          sudo chmod +x /usr/local/bin/daytona
+          daytona version
+
+      - name: Create snapshot on self-hosted Daytona
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          # The self-hosted instance has no transient registry, so `snapshot push`
+          # 500s. Use `snapshot create --image`: the instance pulls the published
+          # image. Requires the ghcr package to be public (or the instance has ghcr
+          # creds). The ref must be name:tag (the CLI rejects :latest and @digest),
+          # so use the :<sha> tag. The baked ENTRYPOINT carries into the snapshot.
+          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
+          yes | daytona snapshot delete "$SNAPSHOT_NAME" || true
+          for i in $(seq 1 30); do
+            if out=$(daytona snapshot create "$SNAPSHOT_NAME" --image "$IMAGE" --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Created self-hosted Daytona snapshot: \`${SNAPSHOT_NAME}\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "$out" | tail -3
+            if echo "$out" | grep -qi "already exists"; then
+              echo "attempt $i: snapshot still deleting; retrying in 5s..."
+              sleep 5
+            else
+              echo "snapshot create failed with a non-retryable error" >&2
+              exit 1
+            fi
+          done
+          echo "failed to create snapshot ${SNAPSHOT_NAME} after retries" >&2
+          exit 1
