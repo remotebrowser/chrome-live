@@ -21,6 +21,7 @@ import logfire
 import websockets
 
 import recording as rec
+import server as http_server
 
 
 @dataclass
@@ -38,6 +39,9 @@ class Config:
     log_level: str = "INFO"
     # Recording
     recording_dir: str = ""  # defaults to /tmp/recordings
+    # HTTP server for retrieving recordings (cdp mode only)
+    http_host: str = "0.0.0.0"
+    http_port: int = 8088
 
     @classmethod
     def from_file(cls, path: str) -> "Config":
@@ -62,6 +66,8 @@ class Config:
             traceparent=tp if tp else None,
             log_level=values.get("LOG_LEVEL", "INFO").upper(),
             recording_dir=values.get("RECORDING_DIR", ""),
+            http_host=values.get("HTTP_HOST", "0.0.0.0"),
+            http_port=int(values.get("BROWSER_TRACE_PORT", "8088")),
         )
 
 
@@ -480,6 +486,21 @@ async def run(config_path: str) -> None:
 
     watcher = asyncio.create_task(watch_config(config_path))
     cdp_task = asyncio.create_task(connect_cdp())
+
+    # Serve recordings over HTTP so they can be listed and downloaded. Started
+    # once at boot from the current config (a later port change via the config
+    # watcher does not re-bind — restart the service to change the port).
+    runner = None
+    try:
+        runner = await http_server.start_server(_config.http_host, _config.http_port)
+        print(
+            f"{_log_prefix} Recordings HTTP server listening on "
+            f"{_config.http_host}:{_config.http_port}",
+            flush=True,
+        )
+    except Exception as e:
+        print(f"{_log_prefix} Failed to start recordings HTTP server: {e}", flush=True)
+
     try:
         # Wait until a signal fires or cdp_task ends on its own
         stop_future = asyncio.ensure_future(stop_event.wait())
@@ -492,6 +513,8 @@ async def run(config_path: str) -> None:
             except asyncio.CancelledError:
                 pass
         await rec.stop_all()
+        if runner is not None:
+            await runner.cleanup()
         print(f"{_log_prefix} Shutting down", flush=True)
 
 

@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /src
 COPY browser-trace/pyproject.toml browser-trace/uv.lock browser-trace/.python-version ./
-COPY browser-trace/main.py browser-trace/recording.py ./
+COPY browser-trace/main.py browser-trace/recording.py browser-trace/server.py ./
 
 # Install the locked runtime deps + the dev group (pyinstaller), then build a
 # onefile binary. `--frozen` keeps the build reproducible against uv.lock.
