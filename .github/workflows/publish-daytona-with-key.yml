@@ -54,10 +54,12 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          # BuildKit secret consumed by the Dockerfile's `--mount=type=secret,id=cloak_key`.
-          # env= reads the value from the runner env, so it never touches disk or logs.
-          secrets: |
-            cloak_key=${{ secrets.CLOAKBROWSER_LICENSE_KEY }}
+          # NOTE: no cloak_key secret passed — testing the keyless path. The
+          # Dockerfile's `--mount=type=secret,id=cloak_key` is optional, so an
+          # absent secret yields an empty key and `cloakbrowser install` falls
+          # back to the anonymous Chromium 146 build. Re-add here to bake a key:
+          #   secrets: |
+          #     cloak_key=${{ secrets.CLOAKBROWSER_LICENSE_KEY }}
           # `:latest` for human pulls; `:<sha>` so `snapshot create --image` can
           # reference a specific tag (Daytona rejects `:latest` and `@digest`).
           tags: |
