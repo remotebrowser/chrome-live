@@ -39,7 +39,7 @@ to it:
 from daytona import Daytona, CreateSandboxFromSnapshotParams
 daytona = Daytona()
 sandbox = daytona.create(CreateSandboxFromSnapshotParams(
-    snapshot="<snapshot-name>",   # this snapshot, by name
+    snapshot="chrome-live-cloakbrowser-pro-daytona",
     public=False,
     auto_stop_interval=15,
 ))
@@ -59,7 +59,7 @@ Container Image") completes, so the variant builds from a fresh base:
 
 - `publish-daytona-image` builds `Dockerfile.daytona` (`FROM` the freshly published base) and
   pushes it to `ghcr.io/<repo>-daytona` tagged both `:latest` and `:<commit-sha>`.
-- `publish-daytona-lambda` registers the snapshot `chrome-live-daytona` on a self-hosted
+- `publish-daytona-lambda` registers the snapshot `chrome-live-cloakbrowser-pro-daytona` on a self-hosted
   Daytona instance reached over the tailnet, via `daytona snapshot create --image
   ghcr.io/<repo>-daytona:<commit-sha>`. It authenticates by setting both `DAYTONA_API_URL` and
   `DAYTONA_API_KEY` (the CLI then uses an implicit env profile; do not run `daytona login` in
@@ -83,7 +83,7 @@ sandboxes get the new one).
 The `chrome-live-daytona` ghcr package must be public (or the self-hosted instance configured
 with ghcr pull credentials) so the instance can pull the image.
 
-Consumers pin the stable snapshot name `chrome-live-daytona` on whichever instance they use.
+Consumers pin the stable snapshot name `chrome-live-cloakbrowser-pro-daytona` on whichever instance they use.
 
 Required CI configuration:
 
@@ -115,7 +115,7 @@ docker build --platform linux/amd64 -f Dockerfile.daytona -t chrome-live-daytona
 # push the local image to Daytona as a named snapshot. The Dockerfile ENTRYPOINT is
 # preserved, so no --entrypoint flag is needed.
 daytona snapshot push chrome-live-daytona:latest \
-  --name chrome-live-daytona --cpu 2 --memory 2 --disk 10
+  --name chrome-live-cloakbrowser-pro-daytona --cpu 2 --memory 2 --disk 10
 ```
 
 Pin `BASE_IMAGE` to a digest for reproducible builds:

@@ -93,6 +93,8 @@ On Fly.io: `fly secrets set CLOAKBROWSER_LICENSE_KEY=cb_xxxxxxxx`
 
 CI publish reads the same key from the `CLOAKBROWSER_LICENSE_KEY` repository secret.
 
+Daytona publishes a dedicated snapshot: `chrome-live-cloakbrowser-pro-daytona`.
+
 ## Daytona backend
 
 The same image also runs on Daytona (a sandbox reached via a Daytona signed preview URL to
