@@ -77,6 +77,11 @@ def configure(recordings_dir: Path) -> None:
     _recordings_dir.mkdir(parents=True, exist_ok=True)
 
 
+def get_recordings_dir() -> Path:
+    """Current recordings dir. Read live so the HTTP server tracks config reloads."""
+    return _recordings_dir
+
+
 async def start_recording(
     session_id: str,
     target_id: str,

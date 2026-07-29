@@ -6,7 +6,17 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('captcha_classifier.js', '.')],
-    hiddenimports=[],
+    # aiohttp pulls these in dynamically; name them so PyInstaller bundles the
+    # recordings HTTP server's full dependency chain in the onefile binary.
+    hiddenimports=[
+        'aiohttp',
+        'multidict',
+        'yarl',
+        'frozenlist',
+        'aiosignal',
+        'attr',
+        'attrs',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
