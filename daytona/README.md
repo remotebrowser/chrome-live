@@ -57,9 +57,11 @@ does nothing about it.
 `.github/workflows/publish-daytona.yml` runs after the base image workflow ("Publish
 Container Image") completes, so the variant builds from a fresh base:
 
-- `publish-daytona-image` builds `Dockerfile.daytona` (`FROM` the freshly published base) and
-  pushes it to `ghcr.io/<repo>-daytona` tagged both `:latest` and `:<commit-sha>`.
-- `publish-daytona-lambda` registers the snapshot `chrome-live-cloakbrowser-pro-daytona` on a self-hosted
+- `ensure-image` builds and pushes the image when the workflow is dispatched manually
+  (feature branches are not published on push); on `workflow_run` it verifies the image
+  the base workflow just pushed exists.
+- `publish-daytona` pushes snapshot `chrome-live-cloakbrowser-pro-daytona` to Daytona Cloud.
+- `publish-daytona-lambda` registers the same snapshot on a self-hosted
   Daytona instance reached over the tailnet, via `daytona snapshot create --image
   ghcr.io/<repo>-daytona:<commit-sha>`. It authenticates by setting both `DAYTONA_API_URL` and
   `DAYTONA_API_KEY` (the CLI then uses an implicit env profile; do not run `daytona login` in

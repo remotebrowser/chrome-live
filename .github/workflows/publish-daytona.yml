@@ -1,7 +1,8 @@
 name: Publish Daytona Snapshot
 
 # Runs after the base image workflow finishes.
-# Also runnable manually.
+# Also runnable manually — on manual dispatch the workflow builds and pushes the
+# image first (feature branches are not published by publish.yml on push).
 on:
   workflow_run:
     workflows: ["Publish Container Image"]
@@ -15,10 +16,62 @@ env:
 
 jobs:
 
-  publish-daytona:
-    # Skip if the upstream publish failed (workflow_run always fires, even on failure).
-    # On manual workflow_dispatch there is no upstream run, so run unconditionally.
+  ensure-image:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Resolve commit SHA
+        id: meta
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=${REGISTRY}/${IMAGE_NAME}:${SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            CLOAKBROWSER_LICENSE_KEY=${{ secrets.CLOAKBROWSER_LICENSE_KEY }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha }}
+
+      - name: Verify published image
+        if: github.event_name == 'workflow_run'
+        run: docker pull --platform linux/amd64 "${{ steps.meta.outputs.image }}"
+
+  publish-daytona:
+    needs: ensure-image
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -48,16 +101,14 @@ jobs:
 
       - name: Push snapshot to Daytona
         env:
-          # workflow_run: the SHA the upstream publish built & tagged. On manual
-          # workflow_dispatch fall back to the dispatch's own SHA.
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          SHA: ${{ needs.ensure-image.outputs.sha }}
+          IMAGE: ${{ needs.ensure-image.outputs.image }}
         run: |
           # The base image is published with both :latest and :<sha> tags. `snapshot
           # push` rejects a source image tagged ':latest', so pull the :<sha> tag and
           # re-tag it locally to a short name (this local tag need not exist on the
           # registry). The image's baked ENTRYPOINT (start-init.sh, which unshare-boots
           # s6 when it is not PID 1) is preserved by push.
-          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
           docker pull --platform linux/amd64 "$IMAGE"
           SRC="chrome-live:${SHA:0:12}"
           [ "$SRC" = "chrome-live:" ] && SRC="chrome-live:build"
@@ -84,10 +135,7 @@ jobs:
           exit 1
 
   publish-daytona-lambda:
-    # Self-hosted Daytona instance, reached over the tailnet. Same image and
-    # snapshot name as the cloud job; only the target server differs
-    # (DAYTONA_API_URL + a separate API key).
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: ensure-image
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     permissions:
@@ -121,7 +169,7 @@ jobs:
 
       - name: Create snapshot on self-hosted Daytona
         env:
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          IMAGE: ${{ needs.ensure-image.outputs.image }}
         run: |
           # The self-hosted instance has no transient registry, so `snapshot push`
           # (local-image upload) 500s. Use `snapshot create --image`: the instance
@@ -130,7 +178,6 @@ jobs:
           # (the CLI rejects :latest and rejects @digest), so use the :<sha> tag the
           # base workflow publishes. The image's baked ENTRYPOINT (start-init.sh)
           # carries into the snapshot (sandbox PID 1 runs `daytona <entrypoint>`).
-          IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
           # Stable name; delete then retry-create while the name is still occupied (async
           # delete), fail fast on any other error.
           yes | daytona snapshot delete "$DAYTONA_SNAPSHOT" || true
