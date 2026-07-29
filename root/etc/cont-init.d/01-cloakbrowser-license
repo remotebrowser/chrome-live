@@ -1,0 +1,28 @@
+#!/command/with-contenv sh
+set -eu
+
+# CloakBrowser is amd64-only; skip when the binary was not installed.
+command -v cloak-browser >/dev/null 2>&1 || exit 0
+
+if [ -z "${CLOAKBROWSER_LICENSE_KEY:-}" ]; then
+  exit 0
+fi
+
+# Persist for cloakbrowser CLI and wrapper (browser runs as user).
+mkdir -p /home/user/.cloakbrowser
+printf '%s\n' "$CLOAKBROWSER_LICENSE_KEY" > /home/user/.cloakbrowser/license.key
+chown -R user:user /home/user/.cloakbrowser
+chmod 700 /home/user/.cloakbrowser
+chmod 600 /home/user/.cloakbrowser/license.key
+
+# Fetch Pro binary when a key is supplied at runtime (image may have been built without one).
+export CLOAKBROWSER_LICENSE_KEY
+python3 -m cloakbrowser install
+
+CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname)
+if [ -n "$CLOAK_DIR" ] && [ -d "$CLOAK_DIR" ]; then
+  rm -rf /usr/local/lib/cloakbrowser
+  cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser
+  chmod 755 /usr/local/lib/cloakbrowser/chrome
+  ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser
+fi

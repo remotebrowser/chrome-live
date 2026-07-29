@@ -72,6 +72,27 @@ switch-browser chrome   # switch back
 The choice persists in `/home/user/.active-browser` and the `chromium` service restarts on
 the same CDP endpoint.
 
+### CloakBrowser Pro
+
+Pass a [CloakBrowser Pro](https://github.com/CloakHQ/cloakbrowser) license key to download
+the latest Pro binary (Chromium 150+) instead of the free v146 build.
+
+**Build time** (bakes Pro into the image):
+
+```
+docker build --build-arg CLOAKBROWSER_LICENSE_KEY=cb_xxxxxxxx -t chrome-live .
+```
+
+**Runtime** (re-downloads Pro on container start if not baked in):
+
+```
+docker run -e CLOAKBROWSER_LICENSE_KEY=cb_xxxxxxxx -p 7000:80 chrome-live
+```
+
+On Fly.io: `fly secrets set CLOAKBROWSER_LICENSE_KEY=cb_xxxxxxxx`
+
+CI publish reads the same key from the `CLOAKBROWSER_LICENSE_KEY` repository secret.
+
 ## Daytona backend
 
 The same image also runs on Daytona (a sandbox reached via a Daytona signed preview URL to

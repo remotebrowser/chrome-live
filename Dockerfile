@@ -88,11 +88,14 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # no arm64 Linux package (the install above already fails on arm64) and
 # CloakBrowser publishes no arm64 binary. The TARGETARCH guard keeps this step a
 # no-op if the image is ever built for another arch.
+# Optional build arg: pass CLOAKBROWSER_LICENSE_KEY to bake in the Pro binary.
+# Runtime -e CLOAKBROWSER_LICENSE_KEY=... is handled by cont-init.d/01-cloakbrowser-license.
+ARG CLOAKBROWSER_LICENSE_KEY
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
         python3-pip libgl1 libgl1-mesa-dri && \
       pip3 install --break-system-packages cloakbrowser && \
-      python3 -m cloakbrowser install && \
+      CLOAKBROWSER_LICENSE_KEY="${CLOAKBROWSER_LICENSE_KEY}" python3 -m cloakbrowser install && \
       CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname) && \
       echo "CloakBrowser dir: ${CLOAK_DIR}" && \
       cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
@@ -125,7 +128,7 @@ COPY allowlist.txt /tmp/allowlist.txt
 COPY denylist.txt /tmp/denylist.txt
 COPY root/ /
 
-RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
+RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /etc/cont-init.d/01-cloakbrowser-license /usr/local/bin/start-init.sh && \
     cp /usr/share/novnc/vnc_lite.html /usr/share/novnc/index.html && \
     sed -i 's/rfb.scaleViewport = readQueryVariable.*$/rfb.scaleViewport = true;/' /usr/share/novnc/index.html && \
     sed -i 's/<div id="top_bar">/<div id="top_bar" style="display:none;">/' /usr/share/novnc/index.html
