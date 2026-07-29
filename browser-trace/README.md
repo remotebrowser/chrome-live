@@ -75,7 +75,9 @@ Recording is always-on in `cdp` mode: a screencast is captured for every tab and
 ## Building a standalone binary
 
 ```sh
-uv run --group dev pyinstaller --onefile --name browser-trace main.py
+uv run --group dev pyinstaller browser-trace.spec
 ```
 
-The binary will be in `dist/browser-trace`.
+The binary will be in `dist/browser-trace`. Build from the spec (not
+`--onefile main.py` directly) so `captcha_classifier.js` is bundled as a data
+file — `main.py` reads it at runtime from `sys._MEIPASS` when frozen.

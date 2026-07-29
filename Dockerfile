@@ -10,12 +10,14 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /src
 COPY browser-trace/pyproject.toml browser-trace/uv.lock browser-trace/.python-version ./
-COPY browser-trace/main.py browser-trace/recording.py browser-trace/server.py ./
+COPY browser-trace/main.py browser-trace/recording.py browser-trace/server.py browser-trace/captcha_classifier.js browser-trace/browser-trace.spec ./
 
-# Install the locked runtime deps + the dev group (pyinstaller), then build a
-# onefile binary. `--frozen` keeps the build reproducible against uv.lock.
+# Install the locked runtime deps + the dev group (pyinstaller), then build the
+# onefile binary. `--frozen` keeps the build reproducible against uv.lock. Build
+# from the spec (not `--onefile main.py`) so captcha_classifier.js is bundled as
+# a data file — main.py reads it at runtime from sys._MEIPASS when frozen.
 RUN uv sync --frozen --group dev
-RUN uv run --group dev pyinstaller --onefile --name browser-trace main.py
+RUN uv run --group dev pyinstaller browser-trace.spec
 
 
 FROM mirror.gcr.io/library/ubuntu:24.04
