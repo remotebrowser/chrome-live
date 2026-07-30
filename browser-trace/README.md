@@ -58,7 +58,8 @@ uv run main.py cdp .env
 2. Auto-attach to all page targets
 3. Emit `tab_opened` events when new tabs are created
 4. Emit `navigation` events (with HTTP status codes) for top-frame document navigations
-5. Send all events to Logfire if a token is configured
+5. Emit `tab_traffic` events with per-tab / per-host byte totals (see [Traffic accounting](#traffic-accounting))
+6. Send all events to Logfire if a token is configured
 
 ### `tinyproxy` — tinyproxy log shipper
 
@@ -71,6 +72,19 @@ Reads tinyproxy log lines from stdin (one per line), parses the leading log leve
 ## Recordings
 
 Recording is always-on in `cdp` mode: a screencast is captured for every tab and finalized when the tab closes. Recordings land in `RECORDING_DIR` as `<id>.mp4` + `<id>.json` sidecar files.
+
+## Traffic accounting
+
+`cdp` mode sums `Network.dataReceived` / `Network.loadingFinished` `encodedDataLength` per tab and per host, so proxy data usage can be attributed to the pages that caused it. Cache hits report zero bytes, so they cost nothing here, matching what a proxy would bill.
+
+Reporting:
+
+- `GET /traffic` on the HTTP server returns live totals: process-wide bytes and request counts, a host ranking, and a per-tab breakdown for open tabs plus the last 50 closed ones. `?hosts=N` caps the host ranking (default 20).
+- A `tab_traffic` event goes to Logfire once a minute per active tab and once more when the tab closes. It carries `bytes_received` (the tab's running total), `bytes_delta` (increase since that tab's previous event, so deltas sum over a session), `requests`, `host_count`, and a `hosts` map of the top 10 hosts by bytes. Tabs that pulled nothing since the last rollup are skipped.
+
+These totals are a floor on the real cost, not the bill. Measured against a byte-counting proxy placed under Chrome, one Wikipedia article in a fresh profile came to 573,305 bytes here against 697,683 on the wire, so 82%. The gap is TLS handshakes and certificate chains (per-connection, so per-host coverage ran from 97% on the main document down to 19% on a host contacted once for 1.5 KB), request/upload bytes and TCP overhead, which CDP does not report at all, and Chrome's own background traffic, which belongs to no tab. Calibrate against the proxy provider's usage API before using these numbers for billing.
+
+Known blind spots: WebSocket payloads (frames emit no `dataReceived`), and fetches issued by service-worker or worker targets, since only `type == "page"` targets are attached.
 
 ## Building a standalone binary
 
