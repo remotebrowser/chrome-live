@@ -10,6 +10,9 @@ Endpoints:
     GET /recordings                JSON array of recording metadata.
     GET /recordings/{id}/video     The MP4 (streamed, supports Range requests so
                                    browsers can seek).
+    GET /traffic                   Live byte totals per tab and per host, from
+                                   `traffic.py`. `?hosts=N` caps the process-wide
+                                   host list (default 20).
 
 The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
@@ -21,6 +24,10 @@ from pathlib import Path
 from aiohttp import web
 
 import recording as rec
+import traffic
+
+_DEFAULT_HOST_LIMIT = 20
+_MAX_HOST_LIMIT = 1000
 
 
 def _list_recordings() -> list[dict]:
@@ -94,6 +101,19 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
     )
 
 
+async def handle_traffic(request: web.Request) -> web.Response:
+    raw = request.query.get("hosts")
+    if raw is None:
+        host_limit = _DEFAULT_HOST_LIMIT
+    else:
+        try:
+            host_limit = int(raw)
+        except ValueError:
+            raise web.HTTPBadRequest(text=f"hosts must be an integer, got {raw!r}")
+        host_limit = max(0, min(host_limit, _MAX_HOST_LIMIT))
+    return web.json_response(traffic.snapshot(host_limit=host_limit))
+
+
 def build_app() -> web.Application:
     app = web.Application()
     app.add_routes(
@@ -101,6 +121,7 @@ def build_app() -> web.Application:
             web.get("/health", handle_health),
             web.get("/recordings", handle_list),
             web.get("/recordings/{recording_id}/video", handle_video),
+            web.get("/traffic", handle_traffic),
         ]
     )
     return app

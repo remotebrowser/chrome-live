@@ -22,6 +22,7 @@ import websockets
 
 import recording as rec
 import server as http_server
+import traffic
 
 
 @dataclass
@@ -129,6 +130,11 @@ CAPTCHA_PROBE_DELAYS: tuple[float, ...] = (0.0, 1.0, 3.0, 6.0)
 # garbage-collected mid-flight (asyncio only holds a weak ref).
 _probe_tasks: set[asyncio.Task] = set()
 
+# How often open tabs emit a byte-usage rollup. One event per active tab per
+# interval — short enough that a crash loses little, long enough not to bill
+# Logfire for per-request volume.
+TRAFFIC_REPORT_INTERVAL = 60.0
+
 
 def _emit_with_traceparent(log_func, msg: str, attrs: dict) -> None:
     if _config.traceparent:
@@ -148,6 +154,7 @@ def emit_cdp_event(
     is_main_frame: bool | None = None,
     captcha_kind: str | None = None,
     event_timestamp: str | None = None,
+    extra: dict | None = None,
 ) -> None:
     attrs = {
         "tab_id": tab_id,
@@ -159,6 +166,8 @@ def emit_cdp_event(
         "event_timestamp": event_timestamp,
     }
     attrs = {k: v for k, v in attrs.items() if v is not None}
+    if extra:
+        attrs.update(extra)
     log_func = (
         logfire.error
         if error_text is not None
@@ -253,6 +262,7 @@ def emit_navigation(session: dict, url: str, status_code: int) -> None:
     # Remember the main-frame URL so an async CAPTCHA probe (fired later on
     # Page.domContentEventFired) can attribute its result to this navigation.
     session["last_url"] = url
+    traffic.set_tab_url(session.get("session_id", ""), url)
     emit_cdp_event(
         "navigation",
         tab_id=session.get("target_id", ""),
@@ -334,6 +344,61 @@ def emit_navigation_failed(
     )
 
 
+def emit_tab_traffic(tab: traffic.TabTraffic, final: bool) -> None:
+    """Report a tab's byte totals: once per rollup interval, then once at close.
+
+    `bytes_delta` is the increase since this tab's previous event, so a query can
+    sum deltas across a session; `bytes_received` is the tab's running total.
+    """
+    delta = tab.bytes_received - tab.reported_bytes
+    tab.reported_bytes = tab.bytes_received
+    hosts = traffic.top_hosts(tab)
+    emit_cdp_event(
+        "tab_traffic",
+        tab_id=tab.target_id,
+        tab_url=tab.url,
+        event_timestamp=datetime.now(timezone.utc).isoformat(),
+        extra={
+            "bytes_received": tab.bytes_received,
+            "bytes_delta": delta,
+            "requests": tab.requests,
+            "host_count": len(tab.by_host),
+            "hosts": {host: byte_count for host, byte_count in hosts},
+            "final": final,
+        },
+    )
+    top = ", ".join(
+        f"{host}={traffic.human_bytes(byte_count)}" for host, byte_count in hosts[:3]
+    )
+    print(
+        f"{_log_prefix} tab_traffic: tab={tab.target_id[:8]} "
+        f"total={traffic.human_bytes(tab.bytes_received)} "
+        f"delta={traffic.human_bytes(delta)} requests={tab.requests} "
+        f"final={final} top=[{top}] url={tab.url}",
+        flush=True,
+    )
+
+
+async def report_traffic(interval: float = TRAFFIC_REPORT_INTERVAL) -> None:
+    """Roll up open tabs periodically so a long-lived tab reports before it
+    closes, and a crash loses at most one interval of accounting. Tabs that
+    pulled nothing since the last rollup are skipped."""
+    while True:
+        await asyncio.sleep(interval)
+        for tab in traffic.open_tabs():
+            if tab.bytes_received != tab.reported_bytes:
+                emit_tab_traffic(tab, final=False)
+
+
+def flush_closed_tabs(*tabs: traffic.TabTraffic | None) -> None:
+    """Emit the closing event for finalized tabs. Tabs that never pulled a byte
+    (about:blank, or a page served wholly from cache) are skipped — `tab_opened`
+    already records that they existed, and a 0-byte event is pure noise."""
+    for tab in tabs:
+        if tab is not None and tab.bytes_received:
+            emit_tab_traffic(tab, final=True)
+
+
 def flush_pending(session: dict) -> None:
     """Check pending responses against the now-known main frame ID and emit matches."""
     main_frame_id = session.get("main_frame_id")
@@ -404,12 +469,14 @@ async def handle_event(ws, event: dict) -> None:
             target_id = target_info.get("targetId", "")
             url = target_info.get("url", "")
             sessions[sid] = {
+                "session_id": sid,
                 "target_id": target_id,
                 "url": url,
                 "main_frame_id": None,
                 "pending": [],
             }
             target_sessions[target_id] = sid
+            traffic.open_tab(sid, target_id, url)
             await send_cdp(ws, "Page.enable", session_id=sid)
             await send_cdp(ws, "Network.enable", session_id=sid)
             await send_cdp(ws, "Page.getFrameTree", session_id=sid)
@@ -431,6 +498,7 @@ async def handle_event(ws, event: dict) -> None:
         stale = [rid for rid, info in network_requests.items() if info.get("session_id") == sid]
         for rid in stale:
             network_requests.pop(rid, None)
+        flush_closed_tabs(traffic.close_tab(sid))
         await rec.stop_recording(sid)
 
     elif method == "Page.screencastFrame" and session_id:
@@ -453,6 +521,11 @@ async def handle_event(ws, event: dict) -> None:
     elif method == "Network.requestWillBeSent" and session_id:
         request_id = params.get("requestId", "")
         resource_type = params.get("type", "")
+        # Every request (not just Documents) is bound to a host for byte
+        # attribution; the Document-only bookkeeping below is separate.
+        traffic.bind_request_host(
+            session_id, request_id, params.get("request", {}).get("url", "")
+        )
         # Track only top-level Document requests; everything else is
         # sub-resource noise we don't surface as a navigation event.
         if request_id and resource_type == "Document":
@@ -468,6 +541,9 @@ async def handle_event(ws, event: dict) -> None:
         frame_id = params.get("frameId", "")
         resource_type = params.get("type", "")
         request_id = params.get("requestId", "")
+        # Re-bind for byte attribution: this is the first (sometimes only) place
+        # a request's URL appears when it predates our Network.enable.
+        traffic.bind_request_host(session_id, request_id, resp.get("url", ""))
         # Successful response — drop the in-flight entry.
         network_requests.pop(request_id, None)
 
@@ -490,6 +566,20 @@ async def handle_event(ws, event: dict) -> None:
                     }
                 )
 
+    elif method == "Network.dataReceived" and session_id:
+        traffic.on_data_received(
+            session_id,
+            params.get("requestId", ""),
+            params.get("encodedDataLength", 0),
+        )
+
+    elif method == "Network.loadingFinished" and session_id:
+        traffic.on_loading_finished(
+            session_id,
+            params.get("requestId", ""),
+            params.get("encodedDataLength", 0),
+        )
+
     elif method == "Network.loadingFailed":
         # Tunnel failures (proxy returns non-200 to CONNECT), DNS errors,
         # cert errors, etc. all surface here — Network.responseReceived does
@@ -499,6 +589,10 @@ async def handle_event(ws, event: dict) -> None:
         # them; sub-resources are already excluded upstream because we only
         # populate `network_requests` for `type=Document`.
         request_id = params.get("requestId", "")
+        # Retire the byte-accounting entry first: the early returns below only
+        # concern the navigation event, but every failed request must release
+        # its in-flight slot.
+        traffic.on_loading_failed(session_id or "", request_id)
         req_info = network_requests.pop(request_id, None)
         if req_info is None:
             return  # Sub-resource or already cleaned up
@@ -575,6 +669,10 @@ async def connect_cdp(poll_interval: float = 5.0) -> None:
         except (OSError, websockets.exceptions.WebSocketException) as exc:
             print(f"{_log_prefix} CDP connection lost ({exc}) — retrying in {poll_interval}s", flush=True)
             await rec.stop_all()
+            # Finalize byte tallies before dropping session state, or they go
+            # with it. Tabs that survive the drop re-attach under a new session
+            # id and start a fresh tally; sum by tab_id to rejoin them.
+            flush_closed_tabs(*traffic.close_all())
             sessions.clear()
             target_sessions.clear()
             pending_commands.clear()
@@ -591,6 +689,7 @@ async def run(config_path: str) -> None:
 
     watcher = asyncio.create_task(watch_config(config_path))
     cdp_task = asyncio.create_task(connect_cdp())
+    reporter = asyncio.create_task(report_traffic())
 
     # Serve recordings over HTTP so they can be listed and downloaded. Started
     # once at boot from the current config (a later port change via the config
@@ -611,13 +710,14 @@ async def run(config_path: str) -> None:
         stop_future = asyncio.ensure_future(stop_event.wait())
         await asyncio.wait([cdp_task, stop_future], return_when=asyncio.FIRST_COMPLETED)
     finally:
-        for task in (watcher, cdp_task):
+        for task in (watcher, cdp_task, reporter):
             task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
         await rec.stop_all()
+        flush_closed_tabs(*traffic.close_all())
         if runner is not None:
             await runner.cleanup()
         print(f"{_log_prefix} Shutting down", flush=True)
