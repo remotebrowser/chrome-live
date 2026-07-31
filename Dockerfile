@@ -134,6 +134,7 @@ EXPOSE 5900
 EXPOSE 80
 EXPOSE 8080
 EXPOSE 9222
+EXPOSE 8088
 
 RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1/hblock' \
   && echo 'd010cb9e0f3c644e9df3bfb387f42f7dbbffbbd481fb50c32683bbe71f994451  /tmp/hblock' | shasum -c \
