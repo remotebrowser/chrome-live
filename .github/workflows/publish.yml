@@ -41,6 +41,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          build-args: |
+            CLOAKBROWSER_LICENSE_KEY=${{ secrets.CLOAKBROWSER_LICENSE_KEY }}
           # `:latest` for human pulls; `:<sha>` so the Daytona snapshot workflow
           # can reference a specific tag (Daytona's `snapshot create --image`
           # rejects `:latest` and rejects `@digest`, it needs name:tag).
