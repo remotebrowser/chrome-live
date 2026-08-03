@@ -3,9 +3,9 @@ export HOME=/home/user
 export DISPLAY=${DISPLAY:-:99}
 
 # Which browser to launch. Default: google-chrome-stable. `switch-browser`
-# writes chrome|cloak to this file and restarts this service, so the same CDP
-# endpoint (:9221) is served by whichever browser is active — browser-trace and
-# cdp-proxy are unaffected.
+# writes chrome|cloak|clearcote to this file and restarts this service, so the
+# same CDP endpoint (:9221) is served by whichever browser is active —
+# browser-trace and cdp-proxy are unaffected.
 # Precedence: the state file (written by `switch-browser` for mid-session swaps) wins when present;
 # otherwise the ACTIVE_BROWSER env var (set at sandbox-create time) selects the browser on first
 # boot, so a fresh sandbox can start straight into Cloak without a post-start swap; default chrome.
@@ -27,9 +27,19 @@ if [ "$ACTIVE" = "cloak" ] && ! command -v cloak-browser >/dev/null 2>&1; then
   ACTIVE=chrome
 fi
 
+if [ "$ACTIVE" = "clearcote" ] && ! command -v clearcote-browser >/dev/null 2>&1; then
+  echo "chromium: Clearcote not installed (amd64 only) — falling back to Chrome" >&2
+  ACTIVE=chrome
+fi
+
 if [ "$ACTIVE" = "cloak" ]; then
   exec s6-setuidgid user cloak-browser $COMMON \
     --fingerprint-platform=windows \
+    --use-gl=swiftshader \
+    about:blank
+elif [ "$ACTIVE" = "clearcote" ]; then
+  exec s6-setuidgid user clearcote-browser $COMMON \
+    --fingerprint-platform=linux \
     --use-gl=swiftshader \
     about:blank
 else
