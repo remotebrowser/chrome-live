@@ -82,12 +82,13 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
 
 RUN apt-get update && apt-get install -y google-chrome-stable
 
-# Install CloakBrowser alongside Google Chrome. Both browsers live in the same
-# image; the chromium s6 service picks which one to launch at runtime (default:
-# google-chrome-stable). The image is amd64-only regardless: Google Chrome has
-# no arm64 Linux package (the install above already fails on arm64) and
-# CloakBrowser publishes no arm64 binary. The TARGETARCH guard keeps this step a
-# no-op if the image is ever built for another arch.
+# Install CloakBrowser and Clearcote alongside Google Chrome. All three
+# browsers live in the same image; the chromium s6 service picks which one to
+# launch at runtime (default: google-chrome-stable). The image is amd64-only
+# regardless: Google Chrome has no arm64 Linux package (the install above
+# already fails on arm64), and neither CloakBrowser nor Clearcote publishes an
+# arm64 binary. The TARGETARCH guard keeps this step a no-op if the image is
+# ever built for another arch.
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
         python3-pip libgl1 libgl1-mesa-dri && \
@@ -98,9 +99,16 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
       chmod 755 /usr/local/lib/cloakbrowser/chrome && \
       ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser && \
+      pip3 install --break-system-packages clearcote && \
+      CLEARCOTE_BIN=$(python3 -c "from clearcote import executable_path; print(executable_path())") && \
+      CLEARCOTE_DIR=$(dirname "${CLEARCOTE_BIN}") && \
+      echo "Clearcote dir: ${CLEARCOTE_DIR}" && \
+      cp -r "${CLEARCOTE_DIR}" /usr/local/lib/clearcote && \
+      chmod 755 "/usr/local/lib/clearcote/$(basename "${CLEARCOTE_BIN}")" && \
+      ln -sf "/usr/local/lib/clearcote/$(basename "${CLEARCOTE_BIN}")" /usr/local/bin/clearcote-browser && \
       rm -rf /var/lib/apt/lists/* ; \
     else \
-      echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
+      echo "Skipping CloakBrowser/Clearcote install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
 # Install s6-overlay
