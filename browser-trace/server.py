@@ -6,11 +6,13 @@ exposes a small read-only API over the same recordings dir so the videos can be
 listed and downloaded.
 
 Endpoints:
-    GET /health                    Liveness probe → {"status": "ok"}.
-    GET /recordings                JSON array of recording metadata.
-    GET /recordings/{id}/video     The MP4 (streamed, supports Range requests so
-                                   browsers can seek).
-    GET /traffic                   Live byte totals per tab and per host, from
+    GET  /health                    Liveness probe → {"status": "ok"}.
+    GET  /recordings                JSON array of recording metadata.
+    GET  /recordings/{id}/video     The MP4 (streamed, supports Range requests so
+                                    browsers can seek).
+    POST /recordings/upload         Store every finalized recording in object storage;
+                                    see `upload.py`.
+    GET  /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
 
@@ -25,6 +27,7 @@ from aiohttp import web
 
 import recording as rec
 import traffic
+import upload
 
 _DEFAULT_HOST_LIMIT = 20
 _MAX_HOST_LIMIT = 1000
@@ -101,6 +104,35 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
     )
 
 
+async def handle_upload(request: web.Request) -> web.Response:
+    """Store every finalized recording on disk in object storage.
+
+    Takes no parameters, and re-uploads unconditionally: keys are the local filenames, so a
+    repeat call overwrites rather than duplicating. A recording only appears on disk once its
+    tab has closed and ffmpeg has encoded it, so one triggered immediately after a tab closes
+    can race the encoder and miss it — the next call picks it up.
+    """
+    if not upload.enabled():
+        # Not an error: an image running without storage configured simply has nowhere
+        # to put recordings.
+        return web.json_response({"status": "disabled", "uploaded": []}, status=200)
+
+    results: list[dict[str, object]] = []
+    for mp4 in sorted(rec.get_recordings_dir().glob("*.mp4")):
+        results.append(await upload.upload_recording(mp4.stem, mp4))
+
+    failed = [r for r in results if r.get("status") == "failed"]
+    return web.json_response(
+        {
+            "status": "ok" if not failed else "partial",
+            "uploaded": [r for r in results if r.get("status") == "uploaded"],
+            "failed": failed,
+        },
+        # 207: some recordings are stored, some aren't, and the caller may want to retry.
+        status=200 if not failed else 207,
+    )
+
+
 async def handle_traffic(request: web.Request) -> web.Response:
     raw = request.query.get("hosts")
     if raw is None:
@@ -121,6 +153,7 @@ def build_app() -> web.Application:
             web.get("/health", handle_health),
             web.get("/recordings", handle_list),
             web.get("/recordings/{recording_id}/video", handle_video),
+            web.post("/recordings/upload", handle_upload),
             web.get("/traffic", handle_traffic),
         ]
     )
