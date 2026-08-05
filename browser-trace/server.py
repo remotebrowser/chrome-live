@@ -10,8 +10,8 @@ Endpoints:
     GET  /recordings                JSON array of recording metadata.
     GET  /recordings/{id}/video     The MP4 (streamed, supports Range requests so
                                     browsers can seek).
-    POST /recordings/upload         Store every finalized recording in object storage;
-                                    see `upload.py`.
+    POST /recordings/upload         Start storing every finalized recording in object
+                                    storage; returns immediately. See `upload.py`.
     GET  /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
@@ -20,6 +20,7 @@ The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
 """
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -31,6 +32,9 @@ import upload
 
 _DEFAULT_HOST_LIMIT = 20
 _MAX_HOST_LIMIT = 1000
+
+# The in-flight upload sweep, if any. One at a time; see handle_upload.
+_upload_task: asyncio.Task[None] | None = None
 
 
 def _list_recordings() -> list[dict]:
@@ -105,32 +109,42 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
 
 
 async def handle_upload(request: web.Request) -> web.Response:
-    """Store every finalized recording on disk in object storage.
+    """Start storing every finalized recording on disk, and return without waiting.
+
+    Transferring several MP4s takes far longer than a caller should hold a request open, and
+    aiohttp cancels a handler when the client disconnects — so a caller that timed out would
+    abort the upload mid-file. This hands the work to a background task instead; outcomes go
+    to the log, not the response.
 
     Takes no parameters, and re-uploads unconditionally: keys are the local filenames, so a
-    repeat call overwrites rather than duplicating. A recording only appears on disk once its
-    tab has closed and ffmpeg has encoded it, so one triggered immediately after a tab closes
-    can race the encoder and miss it — the next call picks it up.
+    repeat overwrites rather than duplicating. A recording only lands on disk once its tab has
+    closed and ffmpeg has encoded it, so a call made the instant a tab closes can race the
+    encoder and miss it — the next call picks it up.
     """
+    global _upload_task
+
     if not upload.enabled():
         # Not an error: an image running without storage configured simply has nowhere
         # to put recordings.
-        return web.json_response({"status": "disabled", "uploaded": []}, status=200)
+        return web.json_response({"status": "disabled", "queued": 0})
 
-    results: list[dict[str, object]] = []
-    for mp4 in sorted(rec.get_recordings_dir().glob("*.mp4")):
-        results.append(await upload.upload_recording(mp4.stem, mp4))
+    if _upload_task is not None and not _upload_task.done():
+        # Triggers arrive per tool completion, faster than uploads finish. Letting a second
+        # sweep start would re-send the same files alongside the first.
+        return web.json_response({"status": "in_progress", "queued": 0}, status=202)
 
-    failed = [r for r in results if r.get("status") == "failed"]
-    return web.json_response(
-        {
-            "status": "ok" if not failed else "partial",
-            "uploaded": [r for r in results if r.get("status") == "uploaded"],
-            "failed": failed,
-        },
-        # 207: some recordings are stored, some aren't, and the caller may want to retry.
-        status=200 if not failed else 207,
-    )
+    videos = sorted(rec.get_recordings_dir().glob("*.mp4"))
+    if videos:
+        # Module-level handle doubles as the strong reference asyncio won't keep itself.
+        _upload_task = asyncio.create_task(_upload_all(videos))
+
+    return web.json_response({"status": "accepted", "queued": len(videos)}, status=202)
+
+
+async def _upload_all(videos: list[Path]) -> None:
+    """Upload each recording in turn. Serial, to avoid competing for the machine's uplink."""
+    for mp4 in videos:
+        await upload.upload_recording(mp4.stem, mp4)
 
 
 async def handle_traffic(request: web.Request) -> web.Response:
