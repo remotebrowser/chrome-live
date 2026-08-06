@@ -41,6 +41,13 @@ CDP_PORT=9222
 | `CDP_HOST`              | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
 | `CDP_PORT`              | Chrome DevTools Protocol port (default: `9222`)                                                                                                                                                                                                                                                                             | No       |
 | `RECORDING_DIR`         | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
+| `TIGRIS_BUCKET`         | Bucket for uploaded recordings. Uploading is impossible unless this and both keys are set                                                                                                                                                                                                                                    | No       |
+| `TIGRIS_ACCESS_KEY_ID`  | S3 access key id                                                                                                                                                                                                                                                                                                            | No       |
+| `TIGRIS_SECRET_ACCESS_KEY` | S3 secret access key                                                                                                                                                                                                                                                                                                     | No       |
+| `TIGRIS_ENDPOINT_URL`   | S3 endpoint (default: `https://t3.storage.dev`)                                                                                                                                                                                                                                                                             | No       |
+| `TIGRIS_REGION`         | S3 region (default: `auto`)                                                                                                                                                                                                                                                                                                 | No       |
+| `UPLOAD_ENABLED`        | Whether finalized recordings are uploaded (default: `false`). Owned by `POST /recordings/config`, which writes it back here; unlike the keys above it is *not* templated from the container's env                                                                                                                            | No       |
+| `BROWSER_ID`            | Client browser id, used to namespace object keys. Owned by `POST /recordings/config`; also not env-templated, since the container cannot derive the client's browser id                                                                                                                                                      | No       |
 
 The config file is watched for changes every 2 seconds, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
 
@@ -72,6 +79,32 @@ Reads tinyproxy log lines from stdin (one per line), parses the leading log leve
 ## Recordings
 
 Recording is always-on in `cdp` mode: a screencast is captured for every tab and finalized when the tab closes. Recordings land in `RECORDING_DIR` as `<id>.mp4` + `<id>.json` sidecar files.
+
+### Uploading to object storage
+
+A finalized recording is also uploaded to an S3-compatible bucket (Tigris) when **both** gates are open:
+
+1. Credentials are present (`TIGRIS_BUCKET` + both keys), templated into the config from the container's env.
+2. `UPLOAD_ENABLED` is on for this browser.
+
+`UPLOAD_ENABLED` defaults to `false` and is toggled over HTTP:
+
+```sh
+curl -X POST localhost:8088/recordings/config \
+  -H 'content-type: application/json' \
+  -d '{"upload_enabled": true, "browser_id": "xyz123"}'
+
+curl localhost:8088/recordings/config
+```
+
+Both values are written back into the config file, so they survive a browser-trace restart or a machine stop/start.
+
+The object key is `<browser_id>/<recording_id>.mp4` (flat when no `browser_id` is set) — the container can't derive the client's browser id on its own, so whoever flips the toggle supplies it. Uploads happen in the background at tab close, so a slow bucket never stalls the CDP event loop; shutdown waits up to 30s for in-flight transfers.
+
+Two consequences worth knowing:
+
+- **No backfill.** Only recordings finalized while the toggle is on are uploaded. Turning it on mid-session does not send what's already on disk.
+- **The local copy is kept**, so `GET /recordings/{id}/video` keeps working. The sidecar gains `upload_key` once the upload lands. A failed upload is logged and leaves the file in place; nothing retries it.
 
 ## Traffic accounting
 

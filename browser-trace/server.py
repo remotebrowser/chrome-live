@@ -6,13 +6,16 @@ exposes a small read-only API over the same recordings dir so the videos can be
 listed and downloaded.
 
 Endpoints:
-    GET /health                    Liveness probe → {"status": "ok"}.
-    GET /recordings                JSON array of recording metadata.
-    GET /recordings/{id}/video     The MP4 (streamed, supports Range requests so
-                                   browsers can seek).
-    GET /traffic                   Live byte totals per tab and per host, from
-                                   `traffic.py`. `?hosts=N` caps the process-wide
-                                   host list (default 20).
+    GET  /health                    Liveness probe → {"status": "ok"}.
+    GET  /recordings                JSON array of recording metadata.
+    GET  /recordings/{id}/video     The MP4 (streamed, supports Range requests so
+                                    browsers can seek).
+    GET  /recordings/config         Current upload toggle + storage state.
+    POST /recordings/config         Turn uploads on/off for this browser and set the
+                                    browser id used to namespace object keys.
+    GET  /traffic                   Live byte totals per tab and per host, from
+                                    `traffic.py`. `?hosts=N` caps the process-wide
+                                    host list (default 20).
 
 The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
@@ -23,8 +26,10 @@ from pathlib import Path
 
 from aiohttp import web
 
+import config_file
 import recording as rec
 import traffic
+import upload
 
 _DEFAULT_HOST_LIMIT = 20
 _MAX_HOST_LIMIT = 1000
@@ -101,6 +106,54 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
     )
 
 
+async def handle_get_upload_config(request: web.Request) -> web.Response:
+    return web.json_response(upload.state())
+
+
+async def handle_set_upload_config(request: web.Request) -> web.Response:
+    """Set `upload_enabled` and/or `browser_id` for this browser.
+
+    Both are persisted to the conf before being applied, so they survive a
+    browser-trace restart and a machine stop/start. Only recordings finalized while
+    uploads are on are sent — a recording already on disk is not backfilled.
+    """
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, ValueError):
+        raise web.HTTPBadRequest(text="body must be a JSON object")
+    if not isinstance(body, dict):
+        raise web.HTTPBadRequest(text="body must be a JSON object")
+
+    enabled = body.get("upload_enabled")
+    if enabled is not None and not isinstance(enabled, bool):
+        raise web.HTTPBadRequest(text="upload_enabled must be a boolean")
+
+    browser_id = body.get("browser_id")
+    if browser_id is not None:
+        if not isinstance(browser_id, str):
+            raise web.HTTPBadRequest(text="browser_id must be a string")
+        # Keys are built as `<browser_id>/<file>`; a slash or traversal segment would
+        # let a caller write outside its own prefix.
+        if not browser_id or "/" in browser_id or browser_id in (".", ".."):
+            raise web.HTTPBadRequest(text="browser_id must be a non-empty string without '/'")
+
+    if enabled is None and browser_id is None:
+        raise web.HTTPBadRequest(text="nothing to set: pass upload_enabled and/or browser_id")
+
+    values: dict[str, str] = {}
+    if enabled is not None:
+        values["UPLOAD_ENABLED"] = "true" if enabled else "false"
+    if browser_id is not None:
+        values["BROWSER_ID"] = browser_id
+    try:
+        config_file.set_values(values)
+    except OSError as e:
+        raise web.HTTPInternalServerError(text=f"could not persist config: {e}")
+
+    upload.set_runtime(enabled=enabled, browser_id=browser_id)
+    return web.json_response(upload.state())
+
+
 async def handle_traffic(request: web.Request) -> web.Response:
     raw = request.query.get("hosts")
     if raw is None:
@@ -120,6 +173,8 @@ def build_app() -> web.Application:
         [
             web.get("/health", handle_health),
             web.get("/recordings", handle_list),
+            web.get("/recordings/config", handle_get_upload_config),
+            web.post("/recordings/config", handle_set_upload_config),
             web.get("/recordings/{recording_id}/video", handle_video),
             web.get("/traffic", handle_traffic),
         ]

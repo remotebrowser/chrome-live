@@ -7,6 +7,11 @@ sed -i \
   -e "s|\${LOGFIRE_TOKEN}|${LOGFIRE_TOKEN:-}|g" \
   -e "s|\${LOGFIRE_TRACEPARENT}|${LOGFIRE_TRACEPARENT:-}|g" \
   -e "s|\${LOG_LEVEL}|${LOG_LEVEL:-INFO}|g" \
+  -e "s|\${TIGRIS_BUCKET}|${TIGRIS_BUCKET:-}|g" \
+  -e "s|\${TIGRIS_ACCESS_KEY_ID}|${TIGRIS_ACCESS_KEY_ID:-}|g" \
+  -e "s|\${TIGRIS_SECRET_ACCESS_KEY}|${TIGRIS_SECRET_ACCESS_KEY:-}|g" \
+  -e "s|\${TIGRIS_ENDPOINT_URL}|${TIGRIS_ENDPOINT_URL:-}|g" \
+  -e "s|\${TIGRIS_REGION}|${TIGRIS_REGION:-}|g" \
   /app/browser-trace.conf
 
 # Wait for Chrome CDP

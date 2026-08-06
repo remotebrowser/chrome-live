@@ -12,7 +12,7 @@ import signal
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import urlopen
@@ -20,9 +20,11 @@ from urllib.request import urlopen
 import logfire
 import websockets
 
+import config_file
 import recording as rec
 import server as http_server
 import traffic
+import upload as uploader
 
 
 @dataclass
@@ -43,6 +45,9 @@ class Config:
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
+    # Object storage for recordings. Credentials come from the container's env;
+    # UPLOAD_ENABLED / BROWSER_ID are written back here by POST /recordings/config.
+    upload: uploader.UploadConfig = field(default_factory=uploader.UploadConfig)
 
     @classmethod
     def from_file(cls, path: str) -> "Config":
@@ -69,7 +74,22 @@ class Config:
             recording_dir=values.get("RECORDING_DIR", ""),
             http_host=values.get("HTTP_HOST", "0.0.0.0"),
             http_port=int(values.get("BROWSER_TRACE_PORT", "8088")),
+            upload=uploader.UploadConfig(
+                bucket=values.get("TIGRIS_BUCKET", ""),
+                access_key_id=values.get("TIGRIS_ACCESS_KEY_ID", ""),
+                secret_access_key=values.get("TIGRIS_SECRET_ACCESS_KEY", ""),
+                # `or`, not a get() default: the s6 run script writes these keys as empty
+                # strings when the container has no such env var set.
+                endpoint_url=values.get("TIGRIS_ENDPOINT_URL") or "https://t3.storage.dev",
+                region=values.get("TIGRIS_REGION") or "auto",
+                enabled=_parse_bool(values.get("UPLOAD_ENABLED", "")),
+                browser_id=values.get("BROWSER_ID", ""),
+            ),
         )
+
+
+def _parse_bool(value: str) -> bool:
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 # Per-session state: maps sessionId -> {target_id, main_frame_id, pending}
@@ -235,6 +255,8 @@ def apply_config(new: Config) -> None:
     )
     rec.configure(recordings_dir=recordings_dir)
     print(f"{_log_prefix} Recordings dir: {recordings_dir}", flush=True)
+
+    uploader.configure(new.upload)
 
 
 def get_browser_ws_url(host: str = "127.0.0.1", port: int = 9222) -> str:
@@ -717,6 +739,8 @@ async def run(config_path: str) -> None:
             except asyncio.CancelledError:
                 pass
         await rec.stop_all()
+        # After stop_all, so uploads queued by the last tabs to close are included.
+        await rec.drain_uploads()
         flush_closed_tabs(*traffic.close_all())
         if runner is not None:
             await runner.cleanup()
@@ -920,6 +944,10 @@ def main() -> None:
     # CDP and tinyproxy modes never get mixed up.
     global _log_prefix
     _log_prefix = f"[{args.cmd}-log]"
+
+    # POST /recordings/config writes UPLOAD_ENABLED / BROWSER_ID back to this same file,
+    # so the toggle survives a restart and the watcher re-applies what was written.
+    config_file.configure(args.config)
 
     config = Config.from_file(args.config)
     if not os.path.exists(args.config):
