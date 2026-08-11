@@ -20,7 +20,6 @@ from urllib.request import urlopen
 import logfire
 import websockets
 
-import config_file
 import recording as rec
 import server as http_server
 import traffic
@@ -45,8 +44,8 @@ class Config:
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
-    # Object storage for recordings. Credentials come from the container's env;
-    # UPLOAD_ENABLED / BROWSER_ID are written back here by POST /recordings/config.
+    # Object storage for recordings. Credentials come from the container's env; the
+    # upload toggle and browser id are set over HTTP and never touch this file.
     upload: uploader.UploadConfig = field(default_factory=uploader.UploadConfig)
 
     @classmethod
@@ -82,14 +81,8 @@ class Config:
                 # strings when the container has no such env var set.
                 endpoint_url=values.get("TIGRIS_ENDPOINT_URL") or "https://t3.storage.dev",
                 region=values.get("TIGRIS_REGION") or "auto",
-                enabled=_parse_bool(values.get("UPLOAD_ENABLED", "")),
-                browser_id=values.get("BROWSER_ID", ""),
             ),
         )
-
-
-def _parse_bool(value: str) -> bool:
-    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 # Per-session state: maps sessionId -> {target_id, main_frame_id, pending}
@@ -944,10 +937,6 @@ def main() -> None:
     # CDP and tinyproxy modes never get mixed up.
     global _log_prefix
     _log_prefix = f"[{args.cmd}-log]"
-
-    # POST /recordings/config writes UPLOAD_ENABLED / BROWSER_ID back to this same file,
-    # so the toggle survives a restart and the watcher re-applies what was written.
-    config_file.configure(args.config)
 
     config = Config.from_file(args.config)
     if not os.path.exists(args.config):

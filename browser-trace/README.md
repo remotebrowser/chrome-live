@@ -46,8 +46,8 @@ CDP_PORT=9222
 | `TIGRIS_SECRET_ACCESS_KEY` | S3 secret access key                                                                                                                                                                                                                                                                                                     | No       |
 | `TIGRIS_ENDPOINT_URL`   | S3 endpoint (default: `https://t3.storage.dev`)                                                                                                                                                                                                                                                                             | No       |
 | `TIGRIS_REGION`         | S3 region (default: `auto`)                                                                                                                                                                                                                                                                                                 | No       |
-| `UPLOAD_ENABLED`        | Whether finalized recordings are uploaded (default: `false`). Owned by `POST /recordings/config`, which writes it back here; unlike the keys above it is *not* templated from the container's env                                                                                                                            | No       |
-| `BROWSER_ID`            | Client browser id, used to namespace object keys. Owned by `POST /recordings/config`; also not env-templated, since the container cannot derive the client's browser id                                                                                                                                                      | No       |
+
+The upload toggle and the client browser id are deliberately absent from this table: they are runtime-only, set over HTTP by `POST /recordings/config`, and never read from or written to the config file.
 
 The config file is watched for changes every 2 seconds, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
 
@@ -85,9 +85,9 @@ Recording is always-on in `cdp` mode: a screencast is captured for every tab and
 A finalized recording is also uploaded to an S3-compatible bucket (Tigris) when **both** gates are open:
 
 1. Credentials are present (`TIGRIS_BUCKET` + both keys), templated into the config from the container's env.
-2. `UPLOAD_ENABLED` is on for this browser.
+2. `upload_enabled` is on for this browser.
 
-`UPLOAD_ENABLED` defaults to `false` and is toggled over HTTP:
+`upload_enabled` defaults to `false` and is toggled over HTTP:
 
 ```sh
 curl -X POST localhost:8088/recordings/config \
@@ -97,7 +97,7 @@ curl -X POST localhost:8088/recordings/config \
 curl localhost:8088/recordings/config
 ```
 
-Both values are written back into the config file, so they survive a browser-trace restart or a machine stop/start.
+Both values live in memory for the life of the process. A browser-trace restart or a machine stop/start reverts them to `false` / unset, so the caller must re-POST after either. Nothing is written to the config file, and a config reload (say a `LOG_LEVEL` edit) leaves them alone.
 
 The object key is `<browser_id>/<recording_id>.mp4` (flat when no `browser_id` is set) — the container can't derive the client's browser id on its own, so whoever flips the toggle supplies it. Uploads happen in the background at tab close, so a slow bucket never stalls the CDP event loop; shutdown waits up to 30s for in-flight transfers.
 
@@ -105,6 +105,15 @@ Two consequences worth knowing:
 
 - **No backfill.** Only recordings finalized while the toggle is on are uploaded. Turning it on mid-session does not send what's already on disk.
 - **The local copy is kept**, so `GET /recordings/{id}/video` keeps working. The sidecar gains `upload_key` once the upload lands. A failed upload is logged and leaves the file in place; nothing retries it.
+
+#### Not finished yet
+
+The container side is complete and wired end to end. What is not:
+
+- **Nothing calls `POST /recordings/config`.** The container cannot derive the client's browser id — `SERVICE_NAME` is the internal fly app name — so the control plane has to supply it. That caller lives in another repo and does not exist yet, so in practice `upload_enabled` is never anything but `false` and no recording is ever uploaded. That caller also has to re-POST after every restart and machine stop/start, since neither value is persisted.
+- **The onefile binary has not been built since boto3 was added.** `browser-trace.spec` was not changed. botocore loads its endpoint/service JSON dynamically, which normally needs help from PyInstaller; `pyinstaller-hooks-contrib` ships `hook-boto3` and `hook-botocore`, so it will most likely bundle correctly on its own — but nobody has run the build and started the result. Expect the binary to grow by tens of MB.
+- **`GET /recordings/config` reports `upload_enabled` from the toggle alone**, while an upload additionally requires credentials. Deploy without `TIGRIS_*` set, POST `{"upload_enabled": true}`, and the endpoint answers `upload_enabled: true` while nothing is ever uploaded. `storage_configured` in the same response is what actually tells you; the more obvious field is the misleading one.
+- **A restart silently drops the toggle and the browser id.** Neither is persisted, so uploads stop and object keys go flat until the control plane POSTs again. If that turns out to be the wrong tradeoff, persistence belongs either back in the config file or in flyfleet templating `BROWSER_ID` into the machine's env at create time.
 
 ## Traffic accounting
 

@@ -12,7 +12,9 @@ Endpoints:
                                     browsers can seek).
     GET  /recordings/config         Current upload toggle + storage state.
     POST /recordings/config         Turn uploads on/off for this browser and set the
-                                    browser id used to namespace object keys.
+                                    browser id used to namespace object keys. Both are
+                                    process-lifetime only — a restart or machine
+                                    stop/start reverts them, so the caller re-POSTs.
     GET  /traffic                   Live byte totals per tab and per host, from
                                     `traffic.py`. `?hosts=N` caps the process-wide
                                     host list (default 20).
@@ -26,7 +28,6 @@ from pathlib import Path
 
 from aiohttp import web
 
-import config_file
 import recording as rec
 import traffic
 import upload
@@ -139,16 +140,6 @@ async def handle_set_upload_config(request: web.Request) -> web.Response:
 
     if enabled is None and browser_id is None:
         raise web.HTTPBadRequest(text="nothing to set: pass upload_enabled and/or browser_id")
-
-    values: dict[str, str] = {}
-    if enabled is not None:
-        values["UPLOAD_ENABLED"] = "true" if enabled else "false"
-    if browser_id is not None:
-        values["BROWSER_ID"] = browser_id
-    try:
-        config_file.set_values(values)
-    except OSError as e:
-        raise web.HTTPInternalServerError(text=f"could not persist config: {e}")
 
     upload.set_runtime(enabled=enabled, browser_id=browser_id)
     return web.json_response(upload.state())

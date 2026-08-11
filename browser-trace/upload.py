@@ -9,9 +9,10 @@ Two independent gates:
   * credentials — `TIGRIS_BUCKET` + both keys, templated into browser-trace.conf from
     the container's env. Missing any of them makes uploading impossible, so an image
     deployed without storage behaves exactly as it did before.
-  * `UPLOAD_ENABLED` — the per-browser runtime toggle, default off. Recording itself is
-    always on and always local; this only decides whether the finished MP4 leaves the
-    container.
+  * `upload_enabled` — the per-browser runtime toggle, default off, set only by
+    `POST /recordings/config`. Recording itself is always on and always local; this
+    only decides whether the finished MP4 leaves the container. Held in memory: a
+    restart or machine stop/start reverts it to off and the caller has to set it again.
 """
 
 import asyncio
@@ -36,10 +37,10 @@ class UploadConfig:
     secret_access_key: str = ""
     endpoint_url: str = "https://t3.storage.dev"
     region: str = "auto"
-    # Runtime toggle + key namespace, both hot-reloadable and persisted in the conf.
-    # browser_id is the *client's* id, which the container cannot know on its own:
-    # SERVICE_NAME is the internal fly app name (chrome-<random>), so flyfleet has to
-    # tell us. Without it, keys fall back to being flat.
+    # Runtime toggle + key namespace, owned by POST /recordings/config for the life of
+    # the process. browser_id is the *client's* id, which the container cannot know on
+    # its own: SERVICE_NAME is the internal fly app name (chrome-<random>), so flyfleet
+    # has to tell us. Without it, keys fall back to being flat.
     enabled: bool = False
     browser_id: str = ""
 
@@ -49,11 +50,24 @@ class UploadConfig:
 
 
 _config = UploadConfig()
+_configured = False
 
 
 def configure(config: UploadConfig) -> None:
-    """Apply a full config (credentials + runtime toggle), rebuilding the client."""
-    global _client, _config
+    """Apply credentials from the conf, rebuilding the client if they changed.
+
+    The runtime knobs are not taken from the conf after the first call: the config-file
+    watcher re-applies the whole file on every mtime change, and the file is templated
+    from the container's env, which never learns about a toggle set over HTTP. Without
+    this, an unrelated edit (LOG_LEVEL, LOGFIRE_TRACEPARENT) would silently switch
+    uploads back off.
+    """
+    global _client, _config, _configured
+    if _configured:
+        config.enabled = _config.enabled
+        config.browser_id = _config.browser_id
+    _configured = True
+
     credentials_changed = (
         config.bucket,
         config.access_key_id,
