@@ -2,7 +2,7 @@ name: Publish Container Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, custom-chromium-docker]
   workflow_dispatch:
 
 env:
