@@ -27,10 +27,21 @@ if [ "$ACTIVE" = "cloak" ] && ! command -v cloak-browser >/dev/null 2>&1; then
   ACTIVE=chrome
 fi
 
+if [ "$ACTIVE" = "custom" ] && ! command -v custom-chrome >/dev/null 2>&1; then
+  echo "chromium: custom-chrome not installed (arm64 only) — falling back to Chrome" >&2
+  ACTIVE=chrome
+fi
+
 if [ "$ACTIVE" = "cloak" ]; then
   exec s6-setuidgid user cloak-browser $COMMON \
     --fingerprint-platform=windows \
     --use-gl=swiftshader \
+    about:blank
+elif [ "$ACTIVE" = "custom" ]; then
+  # No --disable-gpu/--disable-software-rasterizer here: unlike google-chrome-stable,
+  # this build needs a GL context under Xvfb or getContext('webgl') returns null.
+  exec s6-setuidgid user custom-chrome $COMMON \
+    --enable-unsafe-swiftshader \
     about:blank
 else
   exec s6-setuidgid user google-chrome-stable $COMMON \

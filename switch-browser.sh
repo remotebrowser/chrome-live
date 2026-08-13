@@ -1,5 +1,5 @@
 #!/bin/sh
-# switch-browser chrome|cloak
+# switch-browser chrome|cloak|custom
 #
 # Switches the active browser at runtime: writes the choice to the state file
 # read by the chromium s6 service, then restarts that service. The new browser
@@ -11,7 +11,7 @@ STATE_FILE=/home/user/.active-browser
 SERVICE=/run/service/chromium
 
 usage() {
-  echo "usage: switch-browser chrome|cloak" >&2
+  echo "usage: switch-browser chrome|cloak|custom" >&2
   exit 2
 }
 
@@ -22,6 +22,12 @@ case "$1" in
   cloak)
     command -v cloak-browser >/dev/null 2>&1 || {
       echo "switch-browser: CloakBrowser not available (amd64 only)" >&2
+      exit 1
+    }
+    ;;
+  custom)
+    command -v custom-chrome >/dev/null 2>&1 || {
+      echo "switch-browser: custom-chrome not available (arm64 only)" >&2
       exit 1
     }
     ;;

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build stage: compile browser-trace into a standalone binary with PyInstaller.
 FROM python:3.12-slim AS browser-trace-builder
 
@@ -101,6 +102,27 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       rm -rf /var/lib/apt/lists/* ; \
     else \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
+    fi
+
+# Install custom-chromium alongside Chrome/CloakBrowser. This is a source-patched
+# arm64 build (see its RUNNING.md), so it's the mirror image of CloakBrowser:
+# arm64-only, a no-op everywhere else. The tarball is not committed (see
+# .gitignore) and usually isn't present in the build context at all (e.g. in
+# CI, which only builds linux/amd64) -- bind-mount the context instead of
+# COPY so a missing file is just skipped, not a build failure.
+ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-arm64.tar.zst
+RUN --mount=type=bind,source=.,target=/ctx \
+    if [ "${TARGETARCH}" = "arm64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
+      apt-get update -y && apt-get install -y --no-install-recommends zstd && \
+      mkdir -p /usr/local/lib/custom-chromium && \
+      tar --zstd -xf "/ctx/${CUSTOM_CHROMIUM_TARBALL}" --strip-components=1 -C /usr/local/lib/custom-chromium && \
+      chmod 755 /usr/local/lib/custom-chromium/chrome /usr/local/lib/custom-chromium/chrome-wrapper && \
+      ln -sf /usr/local/lib/custom-chromium/chrome-wrapper /usr/local/bin/custom-chrome && \
+      rm -rf /var/lib/apt/lists/* ; \
+    elif [ "${TARGETARCH}" = "arm64" ]; then \
+      echo "Skipping custom-chromium install: ${CUSTOM_CHROMIUM_TARBALL} not in build context" ; \
+    else \
+      echo "Skipping custom-chromium install on ${TARGETARCH} (arm64 only)" ; \
     fi
 
 # Install s6-overlay
