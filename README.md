@@ -59,8 +59,9 @@ Chromium build — alongside Google Chrome. Chrome is the default. Both serve CD
 same internal port (`:9221`), so browser-trace and the `:9222` proxy work identically
 regardless of which is active.
 
-> The image is **amd64 only**. Google Chrome has no arm64 Linux package and CloakBrowser
-> publishes no arm64 binary, so the base image builds `linux/amd64` exclusively.
+> The base image builds for both `linux/amd64` and `linux/arm64`, but CloakBrowser is
+> **amd64 only** — it publishes no arm64 binary, so on arm64 only Google Chrome is
+> available (no `switch-browser cloak`).
 
 Switch at runtime (e.g. over ssh into the container):
 
