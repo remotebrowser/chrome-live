@@ -105,11 +105,11 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
     fi
 
 # Install custom-chromium alongside Chrome/CloakBrowser. This is a source-patched
-# arm64 build (see its RUNNING.md), so it's the mirror image of CloakBrowser:
-# arm64-only, a no-op everywhere else. The tarball is not committed (see
-# .gitignore) and usually isn't present in the build context at all (e.g. in
-# CI, which only builds linux/amd64) -- bind-mount the context instead of
-# COPY so a missing file is just skipped, not a build failure.
+# arm64 build (see its RUNNING.md), committed on this branch for testing (not on
+# main). Bind-mount the context instead of COPY so amd64 builds (which never
+# need it, and on main won't even have the file) don't require it to be
+# present. On arm64 it IS required: fail loud rather than silently ship an
+# image missing custom-chrome.
 ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-arm64.tar.zst
 RUN --mount=type=bind,source=.,target=/ctx \
     if [ "${TARGETARCH}" = "arm64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
@@ -120,7 +120,8 @@ RUN --mount=type=bind,source=.,target=/ctx \
       ln -sf /usr/local/lib/custom-chromium/chrome-wrapper /usr/local/bin/custom-chrome && \
       rm -rf /var/lib/apt/lists/* ; \
     elif [ "${TARGETARCH}" = "arm64" ]; then \
-      echo "Skipping custom-chromium install: ${CUSTOM_CHROMIUM_TARBALL} not in build context" ; \
+      echo "FATAL: ${CUSTOM_CHROMIUM_TARBALL} not found in build context (arm64 build requires it)" >&2 && \
+      exit 1 ; \
     else \
       echo "Skipping custom-chromium install on ${TARGETARCH} (arm64 only)" ; \
     fi
