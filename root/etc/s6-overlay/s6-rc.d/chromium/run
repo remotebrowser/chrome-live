@@ -28,7 +28,7 @@ if [ "$ACTIVE" = "cloak" ] && ! command -v cloak-browser >/dev/null 2>&1; then
 fi
 
 if [ "$ACTIVE" = "custom" ] && ! command -v custom-chrome >/dev/null 2>&1; then
-  echo "chromium: custom-chrome not installed (arm64 only) — falling back to Chrome" >&2
+  echo "chromium: custom-chrome not installed — falling back to Chrome" >&2
   ACTIVE=chrome
 fi
 

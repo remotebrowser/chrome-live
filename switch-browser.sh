@@ -27,7 +27,7 @@ case "$1" in
     ;;
   custom)
     command -v custom-chrome >/dev/null 2>&1 || {
-      echo "switch-browser: custom-chrome not available (arm64 only)" >&2
+      echo "switch-browser: custom-chrome not available" >&2
       exit 1
     }
     ;;

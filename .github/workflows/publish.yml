@@ -28,12 +28,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Test-only: this branch also builds arm64, which needs the custom-chromium
-      # tarball in the build context (Dockerfile hard-fails an arm64 build without
-      # it). Pulled over the tailnet from the box that produces it. That box runs
-      # Tailscale SSH -- auth is tailnet identity + ACL, not a keypair, so no SSH
-      # key secret is needed, just tailnet membership. Not run on main -- that
-      # pipeline stays amd64-only and doesn't need tailnet access.
+      # Test-only: this branch needs the custom-chromium tarball in the build
+      # context (Dockerfile hard-fails an amd64 build without it). Pulled over
+      # the tailnet from the box that produces it. That box runs Tailscale SSH
+      # -- auth is tailnet identity + ACL, not a keypair, so no SSH key secret
+      # is needed, just tailnet membership. Not run on main -- that pipeline
+      # doesn't need tailnet access. It's the amd64 build (matches Daytona's
+      # host arch and Chrome/CloakBrowser), so no QEMU/multi-platform needed.
       - name: Connect to Tailscale
         if: github.ref == 'refs/heads/custom-chromium-docker'
         uses: tailscale/github-action@v3
@@ -46,7 +47,8 @@ jobs:
         if: github.ref == 'refs/heads/custom-chromium-docker'
         run: |
           scp -o StrictHostKeyChecking=accept-new \
-            ubuntu@100.126.119.1:/home/ubuntu/custom-chromium/dist/custom-chromium-151.0.7922.71-release-linux-arm64.tar.zst .
+            ubuntu@100.126.119.1:/home/ubuntu/custom-chromium/dist/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
+            ./custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -59,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: ${{ github.ref == 'refs/heads/custom-chromium-docker' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
+          platforms: linux/amd64
           push: true
           # `:latest` for human pulls; `:<sha>` so the Daytona snapshot workflow
           # can reference a specific tag (Daytona's `snapshot create --image`

@@ -104,26 +104,26 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
-# Install custom-chromium alongside Chrome/CloakBrowser. This is a source-patched
-# arm64 build (see its RUNNING.md), committed on this branch for testing (not on
-# main). Bind-mount the context instead of COPY so amd64 builds (which never
-# need it, and on main won't even have the file) don't require it to be
-# present. On arm64 it IS required: fail loud rather than silently ship an
+# Install custom-chromium alongside Chrome/CloakBrowser. Source-patched Chromium
+# (see its RUNNING.md); the amd64 build, same arch as Chrome/CloakBrowser and as
+# the Daytona host, so no QEMU/multi-platform build needed. Bind-mount the
+# context instead of COPY so the file only needs to be present when it's
+# actually used. Required on amd64: fail loud rather than silently ship an
 # image missing custom-chrome.
-ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-arm64.tar.zst
+ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
 RUN --mount=type=bind,source=.,target=/ctx \
-    if [ "${TARGETARCH}" = "arm64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
+    if [ "${TARGETARCH}" = "amd64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends zstd && \
       mkdir -p /usr/local/lib/custom-chromium && \
       tar --zstd -xf "/ctx/${CUSTOM_CHROMIUM_TARBALL}" --strip-components=1 -C /usr/local/lib/custom-chromium && \
       chmod 755 /usr/local/lib/custom-chromium/chrome /usr/local/lib/custom-chromium/chrome-wrapper && \
       ln -sf /usr/local/lib/custom-chromium/chrome-wrapper /usr/local/bin/custom-chrome && \
       rm -rf /var/lib/apt/lists/* ; \
-    elif [ "${TARGETARCH}" = "arm64" ]; then \
-      echo "FATAL: ${CUSTOM_CHROMIUM_TARBALL} not found in build context (arm64 build requires it)" >&2 && \
+    elif [ "${TARGETARCH}" = "amd64" ]; then \
+      echo "FATAL: ${CUSTOM_CHROMIUM_TARBALL} not found in build context (amd64 build requires it)" >&2 && \
       exit 1 ; \
     else \
-      echo "Skipping custom-chromium install on ${TARGETARCH} (arm64 only)" ; \
+      echo "Skipping custom-chromium install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
 # Install s6-overlay
