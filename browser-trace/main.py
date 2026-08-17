@@ -44,8 +44,7 @@ class Config:
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
-    # Object storage for recordings. Credentials come from the container's env; the
-    # upload toggle and browser id are set over HTTP and never touch this file.
+    # Object storage for recordings.
     upload: uploader.UploadConfig = field(default_factory=uploader.UploadConfig)
 
     @classmethod
