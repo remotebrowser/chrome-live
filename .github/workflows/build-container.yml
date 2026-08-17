@@ -23,6 +23,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Test-only: mirrors the same step in publish.yml. `github.ref` is the PR
+      # merge ref here (refs/pull/N/merge), not the branch name, so gate on
+      # `head_ref` instead -- only set for pull_request events.
+      - name: Connect to Tailscale
+        if: github.head_ref == 'custom-chromium-docker'
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Fetch custom-chromium tarball over tailnet
+        if: github.head_ref == 'custom-chromium-docker'
+        run: |
+          scp -o StrictHostKeyChecking=accept-new \
+            ubuntu@100.126.119.1:/home/ubuntu/custom-chromium/dist/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
+            ./custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
+
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
