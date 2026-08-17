@@ -99,15 +99,6 @@ curl localhost:8088/recordings/config
 
 Both values live in memory for the life of the process. A browser-trace restart or a machine stop/start reverts them to `false` / unset, so the caller must re-POST after either. Nothing is written to the config file.
 
-#### Not finished yet
-
-The container side is complete and wired end to end. What is not:
-
-- **Nothing calls `POST /recordings/config`.** The container cannot derive the client's browser id — `SERVICE_NAME` is the internal fly app name — so the control plane has to supply it. That caller lives in another repo and does not exist yet, so in practice `upload_enabled` is never anything but `false` and no recording is ever uploaded. That caller also has to re-POST after every restart and machine stop/start, since neither value is persisted.
-- **The onefile binary has not been built since boto3 was added.** `browser-trace.spec` was not changed. botocore loads its endpoint/service JSON dynamically, which normally needs help from PyInstaller; `pyinstaller-hooks-contrib` ships `hook-boto3` and `hook-botocore`, so it will most likely bundle correctly on its own — but nobody has run the build and started the result. Expect the binary to grow by tens of MB.
-- **`GET /recordings/config` reports `upload_enabled` from the toggle alone**, while an upload additionally requires credentials. Deploy without `TIGRIS_*` set, POST `{"upload_enabled": true}`, and the endpoint answers `upload_enabled: true` while nothing is ever uploaded. `storage_configured` in the same response is what actually tells you; the more obvious field is the misleading one.
-- **A restart silently drops the toggle and the browser id.** Neither is persisted, so uploads stop and object keys go flat until the control plane POSTs again. If that turns out to be the wrong tradeoff, persistence belongs either back in the config file or in flyfleet templating `BROWSER_ID` into the machine's env at create time.
-
 ## Traffic accounting
 
 `cdp` mode sums `Network.dataReceived` / `Network.loadingFinished` `encodedDataLength` per tab and per host, so proxy data usage can be attributed to the pages that caused it. Cache hits report zero bytes, so they cost nothing here, matching what a proxy would bill.
