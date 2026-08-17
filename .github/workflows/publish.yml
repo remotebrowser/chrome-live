@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           # `:latest` for human pulls; `:<sha>` so the Daytona snapshot workflow
           # can reference a specific tag (Daytona's `snapshot create --image`

@@ -48,6 +48,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     xfce4-goodies \
     xfconf \
     tar \
+    tzdata \
     xz-utils \
     gtk2-engines-murrine \
     dbus-x11 \
@@ -77,6 +78,11 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     fonts-open-sans \
     && fc-cache -f -v
 
+# Default the whole container to PST instead of the implicit UTC
+ENV TZ=America/Los_Angeles
+RUN ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime && \
+    echo "America/Los_Angeles" > /etc/timezone
+
 RUN install -m 0755 -d /etc/apt/keyrings && \
     curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
@@ -85,10 +91,8 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 
 # Install CloakBrowser alongside Google Chrome. Both browsers live in the same
 # image; the chromium s6 service picks which one to launch at runtime (default:
-# google-chrome-stable). The image is amd64-only regardless: Google Chrome has
-# no arm64 Linux package (the install above already fails on arm64) and
-# CloakBrowser publishes no arm64 binary. The TARGETARCH guard keeps this step a
-# no-op if the image is ever built for another arch.
+# google-chrome-stable). CloakBrowser publishes no arm64 binary, so it stays
+# amd64-only; the TARGETARCH guard below keeps that step a no-op on arm64.
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
         python3-pip libgl1 libgl1-mesa-dri && \

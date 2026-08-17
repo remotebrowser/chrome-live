@@ -59,15 +59,16 @@ Chromium build — alongside Google Chrome. Chrome is the default. All serve CDP
 same internal port (`:9221`), so browser-trace and the `:9222` proxy work identically
 regardless of which is active.
 
-> The image is **amd64 only**. Google Chrome has no arm64 Linux package, CloakBrowser
-> publishes no arm64 binary, and the `custom-chrome` build used here targets amd64
-> (matching Daytona's host arch) — so the base image builds `linux/amd64` exclusively.
+> The base image builds for both `linux/amd64` and `linux/arm64`. CloakBrowser and
+> `custom-chrome` are both **amd64 only** — CloakBrowser publishes no arm64 binary, and
+> the `custom-chrome` build used here targets amd64 (matching Daytona's host arch). On
+> arm64 only Google Chrome is available (no `switch-browser cloak` or `custom`).
 
 Switch at runtime (e.g. over ssh into the container):
 
 ```
-switch-browser cloak    # kill Chrome, launch CloakBrowser
-switch-browser custom   # switch to custom-chrome
+switch-browser cloak    # kill Chrome, launch CloakBrowser (amd64 only)
+switch-browser custom   # switch to custom-chrome (amd64 only)
 switch-browser chrome   # switch back
 ```
 

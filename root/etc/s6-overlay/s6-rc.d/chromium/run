@@ -15,7 +15,9 @@ ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo "${ACTIVE_BROWSER:-chrome}")
 # Flags shared by both browsers. Both use the same profile dir and route through
 # tinyproxy (:8119), so the residential-proxy / egress-IP flow is identical
 # regardless of which browser is active.
-COMMON="--start-maximized --no-sandbox --no-first-run --disable-default-apps \
+# --window-position/--window-size force full-screen directly.
+COMMON="--start-maximized --window-position=0,0 --window-size=1920,1080 \
+--no-sandbox --no-first-run --disable-default-apps \
 --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage \
 --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction \
 --disable-background-networking --disable-component-update --disable-domain-reliability \
