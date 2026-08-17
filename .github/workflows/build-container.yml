@@ -41,19 +41,9 @@ jobs:
             ubuntu@100.126.119.1:/home/ubuntu/custom-chromium/dist/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
             ./custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
 
-      # Built one platform at a time, not `platforms: linux/amd64,linux/arm64`
-      # in one call -- see publish.yml for why (concurrent native + QEMU builds
-      # starve each other and intermittently segfault the CloakBrowser step).
-      - name: Build Docker image (amd64)
+      - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64
-          push: false
-
-      - name: Build Docker image (arm64)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: false

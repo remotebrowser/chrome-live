@@ -53,39 +53,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Built one platform at a time, not `platforms: linux/amd64,linux/arm64`
-      # in one call. Concurrent native (amd64) + QEMU-emulated (arm64) builds
-      # on a standard GitHub-hosted runner starve each other -- observed
-      # intermittently segfaulting the (otherwise fine) CloakBrowser install
-      # step under the resulting memory/CPU pressure. Sequential avoids it.
-      - name: Build and push amd64
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64
-
-      - name: Build and push arm64
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/arm64
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
-
-      # Combine the two single-arch images into one multi-arch manifest under
-      # the tags everything else references. `:latest` for human pulls; `:<sha>`
-      # so the Daytona snapshot workflow can reference a specific tag (Daytona's
-      # `snapshot create --image` rejects `:latest` and rejects `@digest`, it
-      # needs name:tag).
-      - name: Combine into multi-arch manifest
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-amd64 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}-arm64
+          # `:latest` for human pulls; `:<sha>` so the Daytona snapshot workflow
+          # can reference a specific tag (Daytona's `snapshot create --image`
+          # rejects `:latest` and rejects `@digest`, it needs name:tag).
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   publish-fly:
     needs: publish
