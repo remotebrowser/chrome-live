@@ -64,10 +64,10 @@ jobs:
           # Stable snapshot name. `snapshot push` refuses an existing name (no --force)
           # and `snapshot delete` is asynchronous, so delete the old one, then retry
           # ONLY while the name is still occupied. Fail fast on any other error.
-          yes | daytona snapshot delete chrome-live-daytona-test || true
+          yes | daytona snapshot delete chrome-live-daytona || true
           for i in $(seq 1 30); do
-            if out=$(daytona snapshot push "$SRC" --name chrome-live-daytona-test --cpu 2 --memory 2 --disk 10 2>&1); then
-              echo "Published Daytona snapshot: \`chrome-live-daytona-test\`" >> "$GITHUB_STEP_SUMMARY"
+            if out=$(daytona snapshot push "$SRC" --name chrome-live-daytona --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Published Daytona snapshot: \`chrome-live-daytona\`" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             echo "$out" | tail -2
@@ -79,7 +79,7 @@ jobs:
               exit 1
             fi
           done
-          echo "failed to push snapshot chrome-live-daytona-test after retries" >&2
+          echo "failed to push snapshot chrome-live-daytona after retries" >&2
           exit 1
 
   publish-daytona-lambda:
@@ -132,10 +132,10 @@ jobs:
           IMAGE="${REGISTRY}/${IMAGE_NAME}:${SHA}"
           # Stable name; delete then retry-create while the name is still occupied (async
           # delete), fail fast on any other error.
-          yes | daytona snapshot delete chrome-live-daytona-test || true
+          yes | daytona snapshot delete chrome-live-daytona || true
           for i in $(seq 1 30); do
-            if out=$(daytona snapshot create chrome-live-daytona-test --image "$IMAGE" --cpu 2 --memory 2 --disk 10 2>&1); then
-              echo "Created self-hosted Daytona snapshot: \`chrome-live-daytona-test\`" >> "$GITHUB_STEP_SUMMARY"
+            if out=$(daytona snapshot create chrome-live-daytona --image "$IMAGE" --cpu 2 --memory 2 --disk 10 2>&1); then
+              echo "Created self-hosted Daytona snapshot: \`chrome-live-daytona\`" >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             echo "$out" | tail -3
@@ -147,5 +147,5 @@ jobs:
               exit 1
             fi
           done
-          echo "failed to create snapshot chrome-live-daytona-test after retries" >&2
+          echo "failed to create snapshot chrome-live-daytona after retries" >&2
           exit 1
