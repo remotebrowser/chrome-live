@@ -97,14 +97,7 @@ curl -X POST localhost:8088/recordings/config \
 curl localhost:8088/recordings/config
 ```
 
-Both values live in memory for the life of the process. A browser-trace restart or a machine stop/start reverts them to `false` / unset, so the caller must re-POST after either. Nothing is written to the config file, and a config reload (say a `LOG_LEVEL` edit) leaves them alone.
-
-The object key is `<browser_id>/<recording_id>.mp4` (flat when no `browser_id` is set) — the container can't derive the client's browser id on its own, so whoever flips the toggle supplies it. Uploads happen in the background at tab close, so a slow bucket never stalls the CDP event loop; shutdown waits up to 30s for in-flight transfers.
-
-Two consequences worth knowing:
-
-- **No backfill.** Only recordings finalized while the toggle is on are uploaded. Turning it on mid-session does not send what's already on disk.
-- **The local copy is kept**, so `GET /recordings/{id}/video` keeps working. The sidecar gains `upload_key` once the upload lands. A failed upload is logged and leaves the file in place; nothing retries it.
+Both values live in memory for the life of the process. A browser-trace restart or a machine stop/start reverts them to `false` / unset, so the caller must re-POST after either. Nothing is written to the config file.
 
 #### Not finished yet
 
