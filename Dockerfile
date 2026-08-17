@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build stage: compile browser-trace into a standalone binary with PyInstaller.
 FROM python:3.12-slim AS browser-trace-builder
 
@@ -105,6 +106,28 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       rm -rf /var/lib/apt/lists/* ; \
     else \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
+    fi
+
+# Install custom-chromium alongside Chrome/CloakBrowser. Source-patched Chromium
+# (see its RUNNING.md); the amd64 build, same arch as Chrome/CloakBrowser and as
+# the Daytona host, so no QEMU/multi-platform build needed. Bind-mount the
+# context instead of COPY so the file only needs to be present when it's
+# actually used. Required on amd64: fail loud rather than silently ship an
+# image missing custom-chrome.
+ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
+RUN --mount=type=bind,source=.,target=/ctx \
+    if [ "${TARGETARCH}" = "amd64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
+      apt-get update -y && apt-get install -y --no-install-recommends zstd && \
+      mkdir -p /usr/local/lib/custom-chromium && \
+      tar --zstd -xf "/ctx/${CUSTOM_CHROMIUM_TARBALL}" --strip-components=1 -C /usr/local/lib/custom-chromium && \
+      chmod 755 /usr/local/lib/custom-chromium/chrome /usr/local/lib/custom-chromium/chrome-wrapper && \
+      ln -sf /usr/local/lib/custom-chromium/chrome-wrapper /usr/local/bin/custom-chrome && \
+      rm -rf /var/lib/apt/lists/* ; \
+    elif [ "${TARGETARCH}" = "amd64" ]; then \
+      echo "FATAL: ${CUSTOM_CHROMIUM_TARBALL} not found in build context (amd64 build requires it)" >&2 && \
+      exit 1 ; \
+    else \
+      echo "Skipping custom-chromium install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
 # Install s6-overlay

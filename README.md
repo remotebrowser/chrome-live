@@ -52,21 +52,23 @@ FLY_IP=$(fly ips list -a test-chrome-live --json | jq -r '.[] | select(.Type=="v
 curl http://$FLY_IP:9222/json/list
 ```
 
-## Stealth browser (CloakBrowser)
+## Stealth browser (CloakBrowser / custom-chromium)
 
 The image ships [CloakBrowser](https://pypi.org/project/cloakbrowser/) — a stealth
-Chromium build — alongside Google Chrome. Chrome is the default. Both serve CDP on the
+Chromium build — alongside Google Chrome. Chrome is the default. All serve CDP on the
 same internal port (`:9221`), so browser-trace and the `:9222` proxy work identically
 regardless of which is active.
 
-> The base image builds for both `linux/amd64` and `linux/arm64`, but CloakBrowser is
-> **amd64 only** — it publishes no arm64 binary, so on arm64 only Google Chrome is
-> available (no `switch-browser cloak`).
+> The base image builds for both `linux/amd64` and `linux/arm64`. CloakBrowser and
+> `custom-chrome` are both **amd64 only** — CloakBrowser publishes no arm64 binary, and
+> the `custom-chrome` build used here targets amd64 (matching Daytona's host arch). On
+> arm64 only Google Chrome is available (no `switch-browser cloak` or `custom`).
 
 Switch at runtime (e.g. over ssh into the container):
 
 ```
-switch-browser cloak    # kill Chrome, launch CloakBrowser
+switch-browser cloak    # kill Chrome, launch CloakBrowser (amd64 only)
+switch-browser custom   # switch to custom-chrome (amd64 only)
 switch-browser chrome   # switch back
 ```
 

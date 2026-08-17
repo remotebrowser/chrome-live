@@ -20,3 +20,6 @@ __pycache__/
 
 # Local download cache
 tmp/
+
+# custom-chromium build tarball (CI fetches it over tailnet; not committed)
+custom-chromium-*.tar.zst
