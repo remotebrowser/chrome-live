@@ -20,14 +20,22 @@ import secrets
 import shutil
 import string
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 import upload
 
 
-_SCREENCAST_FPS = 5
+# Screencast frames are change-driven (Page.startScreencast has no frame-rate parameter),
+# so arrival times drive the timeline and this only resamples to a seekable constant rate.
+_OUTPUT_FPS = 10
+
+# Clamp on per-frame screen time: floor so a burst doesn't collapse to zero-length, ceiling
+# so an idle stretch doesn't encode as minutes of one still image.
+_MIN_FRAME_HOLD_SECONDS = 1 / 30
+_MAX_FRAME_HOLD_SECONDS = 5.0
+
 _SCREENCAST_NTH_FRAME = 2
 _SCREENCAST_QUALITY = 75
 _SCREENCAST_MAX_WIDTH = 854
@@ -44,7 +52,7 @@ class RecordingMeta:
     session_id: str
     started_at: str  # ISO 8601
     stopped_at: str | None
-    duration_seconds: float | None
+    duration_seconds: float | None  # wall-clock length of the session
     storage_key: str  # filename relative to the recordings dir, e.g. <id>.mp4
     # Tab identity for triage: an error elsewhere (e.g. remotebrowser) carries
     # the same target_id and can be joined to this recording.
@@ -52,6 +60,9 @@ class RecordingMeta:
     url: str = ""
     timed_out: bool = False  # True if force-stopped by the max-duration guard
     upload_key: str = ""  # object key once uploaded; empty while local-only
+    # Playback length of the MP4; shorter than duration_seconds when idle stretches were
+    # capped at _MAX_FRAME_HOLD_SECONDS.
+    video_seconds: float = 0.0
 
 
 @dataclass
@@ -64,6 +75,8 @@ class _ActiveRecording:
     # session (best-effort). ws may be stale/closed by stop time (reconnect).
     ws: object
     send_cdp_fn: object
+    # Arrival time of each written frame, on the same monotonic clock as started_ts.
+    frame_times: list[float] = field(default_factory=list)
     # Max-duration watchdog; cancelled by a normal stop.
     timeout_task: object = None
 
@@ -208,6 +221,7 @@ def handle_screencast_frame(event_params: dict, session_id: str, ws, send_cdp_fn
     try:
         frame_path.write_bytes(base64.b64decode(data))
         recording.frame_count += 1
+        recording.frame_times.append(asyncio.get_event_loop().time())
     except Exception as e:
         print(f"[recording] frame write failed: {e}", flush=True)
         return
@@ -267,7 +281,8 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
         await _write_meta(recording.meta)
         print(
             f"[recording] stopped {recording.meta.recording_id} "
-            f"({actual_frames} frames, {elapsed:.1f}s) → {storage_key}",
+            f"({actual_frames} frames, {elapsed:.1f}s → {recording.meta.video_seconds:.1f}s video) "
+            f"→ {storage_key}",
             flush=True,
         )
         _schedule_upload(recording.meta)
@@ -318,18 +333,55 @@ async def drain_uploads() -> None:
         )
 
 
+def _frame_holds(frame_times: list[float], stopped_ts: float) -> list[float]:
+    """How long each frame stays on screen: the gap to the next one, clamped.
+
+    The last frame is held until stopped_ts, so a tab left on a static page doesn't end the
+    video at its final repaint.
+    """
+    holds: list[float] = []
+    for index, arrived in enumerate(frame_times):
+        next_ts = frame_times[index + 1] if index + 1 < len(frame_times) else stopped_ts
+        gap = max(next_ts - arrived, 0.0)
+        holds.append(min(max(gap, _MIN_FRAME_HOLD_SECONDS), _MAX_FRAME_HOLD_SECONDS))
+    return holds
+
+
+def _write_concat_file(frames: list[Path], holds: list[float], path: Path) -> None:
+    lines = ["ffconcat version 1.0"]
+    for frame, hold in zip(frames, holds):
+        lines.append(f"file '{frame.name}'")
+        lines.append(f"duration {hold:.4f}")
+    # The concat demuxer ignores the final `duration` unless the file is repeated.
+    if frames:
+        lines.append(f"file '{frames[-1].name}'")
+    path.write_text("\n".join(lines) + "\n")
+
+
 async def _encode_and_store(recording: _ActiveRecording) -> str:
     recording_id = recording.meta.recording_id
     mp4_path = recording.frames_dir / f"{recording_id}.mp4"
 
+    frames = sorted(recording.frames_dir.glob("*.jpg"))
+    # A frame whose write failed has no timestamp, so pair only as far as both go.
+    frames = frames[: len(recording.frame_times)]
+    holds = _frame_holds(recording.frame_times[: len(frames)], asyncio.get_event_loop().time())
+    recording.meta.video_seconds = round(sum(holds), 2)
+
+    concat_path = recording.frames_dir / "frames.ffconcat"
+    _write_concat_file(frames, holds, concat_path)
+
     cmd = [
         "ffmpeg", "-y",
-        "-framerate", str(_SCREENCAST_FPS),
-        "-i", str(recording.frames_dir / "%06d.jpg"),
+        "-f", "concat",
+        "-safe", "0",
+        "-i", str(concat_path),
         "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2",
+        "-r", str(_OUTPUT_FPS),
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
         "-crf", "28",
+        "-movflags", "+faststart",
         str(mp4_path),
     ]
 

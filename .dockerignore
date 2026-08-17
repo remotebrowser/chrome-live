@@ -1,0 +1,17 @@
+# browser-trace's PyInstaller output and virtualenv: the builder stage rebuilds
+# both from pyproject.toml/uv.lock, and together they are ~120M of upload.
+browser-trace/build/
+browser-trace/dist/
+browser-trace/.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+
+.git/
+.github/
+bench/
+daytona/
+*.md
+screenshot.jpg
+fly.toml
