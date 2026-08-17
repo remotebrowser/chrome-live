@@ -114,9 +114,10 @@ async def handle_get_upload_config(request: web.Request) -> web.Response:
 async def handle_set_upload_config(request: web.Request) -> web.Response:
     """Set `upload_enabled` and/or `browser_id` for this browser.
 
-    Both are persisted to the conf before being applied, so they survive a
-    browser-trace restart and a machine stop/start. Only recordings finalized while
-    uploads are on are sent — a recording already on disk is not backfilled.
+    Both live in memory for the life of the process: a browser-trace restart or a
+    machine stop/start reverts them, so the caller has to POST again. Only recordings
+    finalized while uploads are on are sent — a recording already on disk is not
+    backfilled.
     """
     try:
         body = await request.json()
