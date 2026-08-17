@@ -76,8 +76,6 @@ class Config:
                 bucket=values.get("TIGRIS_BUCKET", ""),
                 access_key_id=values.get("TIGRIS_ACCESS_KEY_ID", ""),
                 secret_access_key=values.get("TIGRIS_SECRET_ACCESS_KEY", ""),
-                # `or`, not a get() default: the s6 run script writes these keys as empty
-                # strings when the container has no such env var set.
                 endpoint_url=values.get("TIGRIS_ENDPOINT_URL") or "https://t3.storage.dev",
                 region=values.get("TIGRIS_REGION") or "auto",
             ),
