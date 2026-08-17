@@ -729,7 +729,6 @@ async def run(config_path: str) -> None:
             except asyncio.CancelledError:
                 pass
         await rec.stop_all()
-        # After stop_all, so uploads queued by the last tabs to close are included.
         await rec.drain_uploads()
         flush_closed_tabs(*traffic.close_all())
         if runner is not None:
