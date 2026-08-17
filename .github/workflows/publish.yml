@@ -2,7 +2,7 @@ name: Publish Container Image
 
 on:
   push:
-    branches: [main, custom-chromium-docker]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -28,15 +28,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Test-only: this branch needs the custom-chromium tarball in the build
-      # context (Dockerfile hard-fails an amd64 build without it). Pulled over
-      # the tailnet from the box that produces it. That box runs Tailscale SSH
-      # -- auth is tailnet identity + ACL, not a keypair, so no SSH key secret
-      # is needed, just tailnet membership. Not run on main -- that pipeline
-      # doesn't need tailnet access. It's the amd64 build (matches Daytona's
-      # host arch and Chrome/CloakBrowser), so no QEMU/multi-platform needed.
+      # The custom-chromium tarball must be in the build context -- Dockerfile
+      # hard-fails an amd64 build without it. Pulled over the tailnet from the
+      # box that produces it. That box runs Tailscale SSH -- auth is tailnet
+      # identity + ACL, not a keypair, so no SSH key secret is needed, just
+      # tailnet membership.
       - name: Connect to Tailscale
-        if: github.ref == 'refs/heads/custom-chromium-docker'
         uses: tailscale/github-action@v3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -44,7 +41,6 @@ jobs:
           tags: tag:ci
 
       - name: Fetch custom-chromium tarball over tailnet
-        if: github.ref == 'refs/heads/custom-chromium-docker'
         run: |
           scp -o StrictHostKeyChecking=accept-new \
             ubuntu@100.126.119.1:/home/ubuntu/custom-chromium/dist/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
