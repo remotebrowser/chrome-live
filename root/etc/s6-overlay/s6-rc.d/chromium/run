@@ -16,8 +16,11 @@ ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo "${ACTIVE_BROWSER:-chrome}")
 # tinyproxy (:8119), so the residential-proxy / egress-IP flow is identical
 # regardless of which browser is active.
 # --window-position/--window-size force full-screen directly.
-COMMON="--start-maximized --window-position=0,0 --window-size=1920,1080 \
+# --force-device-scale-factor matches the popular desktop scaling (125%).
+# --window-size is adjusted to account for 1920x1080 scaled down by 125%.
+COMMON="--start-maximized --window-position=0,0 --window-size=1536,864 \
 --no-sandbox --no-first-run --disable-default-apps \
+--force-device-scale-factor=1.25 \
 --no-default-browser-check --remote-debugging-port=9221 --disable-dev-shm-usage \
 --disable-features=OptimizationGuideModelDownloading,OptimizationHints,OptimizationTargetPrediction \
 --disable-background-networking --disable-component-update --disable-domain-reliability \
