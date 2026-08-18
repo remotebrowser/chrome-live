@@ -6,13 +6,13 @@ exposes a small read-only API over the same recordings dir so the videos can be
 listed and downloaded.
 
 Endpoints:
-    GET  /health                    Liveness probe → {"status": "ok"}.
-    GET  /recordings                JSON array of recording metadata.
-    GET  /recordings/{id}/video     The MP4 (streamed, supports Range requests so
-                                    browsers can seek).
-    GET  /traffic                   Live byte totals per tab and per host, from
-                                    `traffic.py`. `?hosts=N` caps the process-wide
-                                    host list (default 20).
+    GET /health                    Liveness probe → {"status": "ok"}.
+    GET /recordings                JSON array of recording metadata.
+    GET /recordings/{id}/video     The MP4 (streamed, supports Range requests so
+                                   browsers can seek).
+    GET /traffic                   Live byte totals per tab and per host, from
+                                   `traffic.py`. `?hosts=N` caps the process-wide
+                                   host list (default 20).
 
 The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
