@@ -69,6 +69,25 @@ tinyproxy -d -c /etc/tinyproxy.conf | uv run main.py tinyproxy .env
 
 Reads tinyproxy log lines from stdin (one per line), parses the leading log level (`CONNECT`, `ERROR`, `WARNING`, `NOTICE`, `CRITICAL`, `INFO`), tees each line to stdout for container log collectors, and emits to Logfire via the appropriate severity (`logfire.info` / `logfire.warn` / `logfire.error` / `logfire.notice`). Each event carries a `tinyproxy_level` attribute so the level is queryable in Logfire. Configure tinyproxy with `LogFile "/dev/stdout"` so its log writes flow to the pipe.
 
+### `record` — send a recording to a pre-signed URL
+
+```sh
+uv run main.py record --url="<presigned_put_url>"
+```
+
+PUTs the newest finalized recording at a URL someone else signed. This container holds no bucket
+credentials and never names a key — the control plane signs for the key it wants and passes only
+the URL.
+
+The `Content-Type` sent is always `video/mp4` and must match what the URL was signed with, or S3
+answers `SignatureDoesNotMatch`. Transient failures (5xx, timeouts, connection errors) are retried
+with backoff; a 4xx is not, because a mis-signed or expired URL will not start working. Retry
+notices go to stdout and only a fatal error goes to stderr, so a caller that treats stderr as
+failure sees nothing from a run that recovered. Exit status is 0 on success, 1 otherwise.
+
+Uploading changes nothing on disk: the local MP4 stays and `GET /recordings/{id}/video` keeps
+serving it, so a repeat is harmless.
+
 ## Recordings
 
 Recording is always-on in `cdp` mode: a screencast is captured for every tab and finalized when the tab closes. Recordings land in `RECORDING_DIR` as `<id>.mp4` + `<id>.json` sidecar files.
