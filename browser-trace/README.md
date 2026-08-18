@@ -73,21 +73,6 @@ Reads tinyproxy log lines from stdin (one per line), parses the leading log leve
 
 Recording is always-on in `cdp` mode: a screencast is captured for every tab and finalized when the tab closes. Recordings land in `RECORDING_DIR` as `<id>.mp4` + `<id>.json` sidecar files.
 
-### Getting a recording off the machine
-
-This container holds **no** bucket credentials and never talks to object storage. The control
-plane owns that: it lists recordings, mints a pre-signed PUT URL for the key it wants, and runs
-the upload in here.
-
-```sh
-curl --fail -X PUT -T /tmp/recordings/<recording_id>.mp4 \
-  -H 'Content-Type: video/mp4' "<presigned_url>"
-```
-
-`Content-Type` must be exactly the value the URL was signed with, or S3 answers
-`SignatureDoesNotMatch`. Uploading does not change anything on disk — the local MP4 stays and
-`GET /recordings/{id}/video` keeps serving it, so an upload can be retried or repeated.
-
 ## Traffic accounting
 
 `cdp` mode sums `Network.dataReceived` / `Network.loadingFinished` `encodedDataLength` per tab and per host, so proxy data usage can be attributed to the pages that caused it. Cache hits report zero bytes, so they cost nothing here, matching what a proxy would bill.
