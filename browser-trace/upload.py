@@ -13,6 +13,9 @@ from pathlib import Path
 
 import aiohttp
 
+# recording.py's RECORDING_DIR default, which chrome-live never overrides.
+RECORDINGS_DIR = Path("/tmp/recordings")
+
 # Must equal the ContentType the URL was signed with, or S3 answers SignatureDoesNotMatch
 # (flyfleet src/recordings.py CONTENT_TYPE).
 CONTENT_TYPE = "video/mp4"
@@ -26,18 +29,12 @@ class UploadError(Exception):
     """Fatal: the upload cannot succeed by retrying."""
 
 
-def resolve_video(recordings_dir: Path, file: str = "") -> Path:
-    """The MP4 to send: the named file, or the newest recording when none is named."""
-    if file:
-        path = Path(file)
-        if not path.is_file():
-            raise UploadError(f"no such file: {path}")
-        return path
-
-    # Ids sort chronologically (recording.py builds them from a UTC timestamp).
-    videos = sorted(recordings_dir.glob("*.mp4"), reverse=True)
+def newest_recording() -> Path:
+    """The most recently finalized recording. Ids sort chronologically, so name order is time
+    order (recording.py builds them from a UTC timestamp)."""
+    videos = sorted(RECORDINGS_DIR.glob("*.mp4"), reverse=True)
     if not videos:
-        raise UploadError(f"no recordings in {recordings_dir}")
+        raise UploadError(f"no recordings in {RECORDINGS_DIR}")
     return videos[0]
 
 
