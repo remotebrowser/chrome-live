@@ -12,7 +12,7 @@ import signal
 import sys
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import urlopen
@@ -23,7 +23,6 @@ import websockets
 import recording as rec
 import server as http_server
 import traffic
-import upload as uploader
 
 
 @dataclass
@@ -44,8 +43,6 @@ class Config:
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
-    # Object storage for recordings.
-    upload: uploader.UploadConfig = field(default_factory=uploader.UploadConfig)
 
     @classmethod
     def from_file(cls, path: str) -> "Config":
@@ -72,13 +69,6 @@ class Config:
             recording_dir=values.get("RECORDING_DIR", ""),
             http_host=values.get("HTTP_HOST", "0.0.0.0"),
             http_port=int(values.get("BROWSER_TRACE_PORT", "8088")),
-            upload=uploader.UploadConfig(
-                bucket=values.get("TIGRIS_BUCKET", ""),
-                access_key_id=values.get("TIGRIS_ACCESS_KEY_ID", ""),
-                secret_access_key=values.get("TIGRIS_SECRET_ACCESS_KEY", ""),
-                endpoint_url=values.get("TIGRIS_ENDPOINT_URL") or "https://t3.storage.dev",
-                region=values.get("TIGRIS_REGION") or "auto",
-            ),
         )
 
 
@@ -245,8 +235,6 @@ def apply_config(new: Config) -> None:
     )
     rec.configure(recordings_dir=recordings_dir)
     print(f"{_log_prefix} Recordings dir: {recordings_dir}", flush=True)
-
-    uploader.configure(new.upload)
 
 
 def get_browser_ws_url(host: str = "127.0.0.1", port: int = 9222) -> str:
@@ -729,7 +717,6 @@ async def run(config_path: str) -> None:
             except asyncio.CancelledError:
                 pass
         await rec.stop_all()
-        await rec.drain_uploads()
         flush_closed_tabs(*traffic.close_all())
         if runner is not None:
             await runner.cleanup()

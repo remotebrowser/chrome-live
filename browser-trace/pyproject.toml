@@ -2,7 +2,7 @@
 name = "browser-trace"
 version = "0.4.0"
 requires-python = ">=3.12"
-dependencies = ["websockets", "logfire", "aiohttp", "boto3"]
+dependencies = ["websockets", "logfire", "aiohttp"]
 
 [dependency-groups]
 dev = ["pyinstaller"]

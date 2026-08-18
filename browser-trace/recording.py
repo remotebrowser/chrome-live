@@ -8,9 +8,9 @@ started automatically for every tab the instant it attaches (Target.attachedToTa
 so every tab records for its whole lifetime with no API trigger. Each recording is
 finalized when its tab closes or the CDP connection drops.
 
-Finalized recordings also go to object storage when uploads are switched on for this
-browser (see `upload.py`); the local copy is kept either way, so `server.py` can still
-serve it.
+Recordings stay on this machine. Getting one off the box is the control plane's job:
+it mints a pre-signed PUT URL and runs the curl in here, so the container holds no
+bucket credentials of its own.
 """
 
 import asyncio
@@ -23,8 +23,6 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-
-import upload
 
 
 # Screencast frames are change-driven (Page.startScreencast has no frame-rate parameter),
@@ -59,7 +57,6 @@ class RecordingMeta:
     target_id: str = ""
     url: str = ""
     timed_out: bool = False  # True if force-stopped by the max-duration guard
-    upload_key: str = ""  # object key once uploaded; empty while local-only
     # Playback length of the MP4; shorter than duration_seconds when idle stretches were
     # capped at _MAX_FRAME_HOLD_SECONDS.
     video_seconds: float = 0.0
@@ -89,14 +86,6 @@ _active_recording_by_session: dict[str, _ActiveRecording] = {}
 
 # Injected at startup from Config
 _recordings_dir: Path = Path("recordings")
-
-# Uploads run detached from tab close so a slow bucket can't stall the CDP event loop.
-# Held in a strong-ref set because asyncio only keeps a weak one, and drained on
-# shutdown so a tab closing at teardown doesn't lose its upload to a cancelled loop.
-_pending_uploads: set[asyncio.Task] = set()
-
-# Cap on how long shutdown waits for in-flight uploads before abandoning them.
-_UPLOAD_DRAIN_SECONDS = 30.0
 
 
 def configure(recordings_dir: Path) -> None:
@@ -285,7 +274,6 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
             f"→ {storage_key}",
             flush=True,
         )
-        _schedule_upload(recording.meta)
     except Exception as e:
         print(f"[recording] encode/store failed for {recording.meta.recording_id}: {e}", flush=True)
     finally:
@@ -297,40 +285,6 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
 async def stop_all() -> None:
     for session_id in list(_active_recording_by_session.keys()):
         await stop_recording(session_id)
-
-
-def _schedule_upload(meta: RecordingMeta) -> None:
-    """Upload this recording in the background, if uploads are on for this browser."""
-    if not upload.enabled_for_recordings():
-        return
-    task = asyncio.create_task(_upload_and_update_meta(meta))
-    _pending_uploads.add(task)
-    task.add_done_callback(_pending_uploads.discard)
-
-
-async def _upload_and_update_meta(meta: RecordingMeta) -> None:
-    key = await upload.upload_recording(meta.recording_id, _recordings_dir / meta.storage_key)
-    if key is None:
-        return
-    meta.upload_key = key
-    await _write_meta(meta)
-
-
-async def drain_uploads() -> None:
-    """Wait for in-flight uploads, so shutdown doesn't cancel them mid-transfer."""
-    if not _pending_uploads:
-        return
-    pending = list(_pending_uploads)
-    print(f"[recording] waiting for {len(pending)} upload(s) to finish", flush=True)
-    _, still_pending = await asyncio.wait(pending, timeout=_UPLOAD_DRAIN_SECONDS)
-    for task in still_pending:
-        task.cancel()
-    if still_pending:
-        print(
-            f"[recording] abandoned {len(still_pending)} upload(s) after "
-            f"{_UPLOAD_DRAIN_SECONDS:.0f}s",
-            flush=True,
-        )
 
 
 def _frame_holds(frame_times: list[float], stopped_ts: float) -> list[float]:
