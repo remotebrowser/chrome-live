@@ -5,8 +5,7 @@ This container holds no bucket credentials. The caller signs a PUT for the key i
 
 Why a subcommand rather than a bare `curl`: the caller is a one-shot machine exec with no
 queue behind it, so a transient 5xx would surface as a failed upload it has to notice and
-repeat. Retrying here keeps that in the container, and resolving the recording means the
-caller never has to know the layout of the recordings dir.
+repeat. Retrying here keeps that in the container.
 """
 
 import asyncio
@@ -27,25 +26,15 @@ class UploadError(Exception):
     """Fatal: the upload cannot succeed by retrying."""
 
 
-def resolve_video(recordings_dir: Path, recording_id: str = "", file: str = "") -> Path:
-    """Find the MP4 to send, by explicit path, by recording id, or newest-first."""
+def resolve_video(recordings_dir: Path, file: str = "") -> Path:
+    """The MP4 to send: the named file, or the newest recording when none is named."""
     if file:
         path = Path(file)
         if not path.is_file():
             raise UploadError(f"no such file: {path}")
         return path
 
-    if recording_id:
-        # Keeps a caller-supplied id from escaping the recordings dir.
-        path = (recordings_dir / f"{recording_id}.mp4").resolve()
-        try:
-            path.relative_to(recordings_dir.resolve())
-        except ValueError:
-            raise UploadError(f"recording id escapes the recordings dir: {recording_id!r}")
-        if not path.is_file():
-            raise UploadError(f"no recording {recording_id!r} in {recordings_dir}")
-        return path
-
+    # Ids sort chronologically (recording.py builds them from a UTC timestamp).
     videos = sorted(recordings_dir.glob("*.mp4"), reverse=True)
     if not videos:
         raise UploadError(f"no recordings in {recordings_dir}")

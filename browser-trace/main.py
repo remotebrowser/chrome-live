@@ -887,16 +887,11 @@ def run_tinyproxy(config_path: str) -> None:
 
 def run_record(args) -> int:
     """Send one recording to a pre-signed URL. Returns a process exit code."""
-    if args.recordings_dir:
-        recordings_dir = Path(args.recordings_dir)
-    elif args.config:
-        configured = Config.from_file(args.config).recording_dir
-        recordings_dir = Path(configured) if configured else Path("/tmp/recordings")
-    else:
-        recordings_dir = Path("/tmp/recordings")
+    configured = Config.from_file(args.config).recording_dir if args.config else ""
+    recordings_dir = Path(configured) if configured else Path("/tmp/recordings")
 
     try:
-        video = uploader.resolve_video(recordings_dir, args.recording_id, args.file)
+        video = uploader.resolve_video(recordings_dir, args.file)
         size = asyncio.run(uploader.put_recording(video, args.url))
     except uploader.UploadError as exc:
         # stderr, so the caller's exec surfaces the reason alongside the exit code.
@@ -942,18 +937,12 @@ def main() -> None:
         help="PUT a finalized recording at a pre-signed URL",
     )
     p_rec.add_argument("--url", required=True, help="Pre-signed PUT URL, signed for video/mp4")
-    p_rec.add_argument(
-        "--recording-id",
-        default="",
-        help="Which recording to send (default: the newest one)",
-    )
-    p_rec.add_argument("--file", default="", help="Send this file instead of resolving an id")
+    p_rec.add_argument("--file", default="", help="Recording to send (default: the newest one)")
     p_rec.add_argument(
         "--config",
         default="",
         help="Config file to read RECORDING_DIR from (default: /tmp/recordings)",
     )
-    p_rec.add_argument("--recordings-dir", default="", help="Override the recordings dir outright")
 
     args = parser.parse_args()
 

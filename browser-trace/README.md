@@ -72,13 +72,13 @@ Reads tinyproxy log lines from stdin (one per line), parses the leading log leve
 ### `record` — send a recording to a pre-signed URL
 
 ```sh
-uv run main.py record --url="<presigned_put_url>" [--recording-id <id>]
+uv run main.py record --url="<presigned_put_url>" [--file <path>]
 ```
 
 PUTs a finalized recording at a URL someone else signed. This container holds no bucket
 credentials and never names a key — the control plane signs for the key it wants and passes only
-the URL. Without `--recording-id` the newest recording is sent; `--file` sends an exact path, and
-`--config` is read for `RECORDING_DIR`.
+the URL. `--file` names the recording to send; without it the newest one in `RECORDING_DIR` goes,
+and `--config` says where to read that from.
 
 The `Content-Type` sent is always `video/mp4` and must match what the URL was signed with, or S3
 answers `SignatureDoesNotMatch`. Transient failures (5xx, timeouts, connection errors) are retried
