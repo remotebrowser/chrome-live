@@ -23,6 +23,7 @@ import websockets
 import recording as rec
 import server as http_server
 import traffic
+import upload as uploader
 
 
 @dataclass
@@ -884,12 +885,34 @@ def run_tinyproxy(config_path: str) -> None:
     print(f"{_log_prefix} stdin closed, shutting down", flush=True)
 
 
+def run_record(args) -> int:
+    """Send one recording to a pre-signed URL. Returns a process exit code."""
+    if args.recordings_dir:
+        recordings_dir = Path(args.recordings_dir)
+    elif args.config:
+        configured = Config.from_file(args.config).recording_dir
+        recordings_dir = Path(configured) if configured else Path("/tmp/recordings")
+    else:
+        recordings_dir = Path("/tmp/recordings")
+
+    try:
+        video = uploader.resolve_video(recordings_dir, args.recording_id, args.file)
+        size = asyncio.run(uploader.put_recording(video, args.url))
+    except uploader.UploadError as exc:
+        # stderr, so the caller's exec surfaces the reason alongside the exit code.
+        print(f"[upload] failed: {exc}", file=sys.stderr, flush=True)
+        return 1
+
+    print(f"[upload] sent {video.name} ({size} bytes)", flush=True)
+    return 0
+
+
 def main() -> None:
     # Legacy invocation `browser-trace <config>` is sugar for the `cdp`
     # subcommand. If the first arg is not a known subcommand (and isn't a
     # flag), insert `cdp` so the existing chrome-live deployment keeps
     # working unchanged.
-    known_cmds = {"cdp", "tinyproxy"}
+    known_cmds = {"cdp", "tinyproxy", "record"}
     if (
         len(sys.argv) >= 2
         and sys.argv[1] not in known_cmds
@@ -914,7 +937,30 @@ def main() -> None:
     )
     p_tp.add_argument("config", help="Path to the config file")
 
+    p_rec = subparsers.add_parser(
+        "record",
+        help="PUT a finalized recording at a pre-signed URL",
+    )
+    p_rec.add_argument("--url", required=True, help="Pre-signed PUT URL, signed for video/mp4")
+    p_rec.add_argument(
+        "--recording-id",
+        default="",
+        help="Which recording to send (default: the newest one)",
+    )
+    p_rec.add_argument("--file", default="", help="Send this file instead of resolving an id")
+    p_rec.add_argument(
+        "--config",
+        default="",
+        help="Config file to read RECORDING_DIR from (default: /tmp/recordings)",
+    )
+    p_rec.add_argument("--recordings-dir", default="", help="Override the recordings dir outright")
+
     args = parser.parse_args()
+
+    # Before apply_config: uploading needs no Logfire, no CDP and no HTTP server, and the
+    # caller reads any stderr output as a failed exec — so this path stays quiet and short.
+    if args.cmd == "record":
+        sys.exit(run_record(args))
 
     # Pin the stdout / Logfire-message prefix to the actual subcommand so the
     # CDP and tinyproxy modes never get mixed up.
