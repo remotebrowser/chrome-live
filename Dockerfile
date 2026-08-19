@@ -150,6 +150,7 @@ COPY tinyproxy.conf /app/tinyproxy.conf
 COPY browser-trace.conf /app/browser-trace.conf
 COPY allowlist.txt /tmp/allowlist.txt
 COPY denylist.txt /tmp/denylist.txt
+COPY hosts-to-filter.awk /tmp/hosts-to-filter.awk
 COPY root/ /
 
 RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
@@ -169,7 +170,9 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
   && chown 0:0 /usr/local/bin/hblock \
   && chmod 755 /usr/local/bin/hblock \
   && /usr/local/bin/hblock --output /app/hosts --header none --allowlist /tmp/allowlist.txt --denylist /tmp/denylist.txt \
-  && rm -f /tmp/allowlist.txt /tmp/denylist.txt
+  && awk -f /tmp/hosts-to-filter.awk /app/hosts > /app/tinyproxy-filter.txt \
+  && test "$(wc -l < /app/tinyproxy-filter.txt)" -gt 500000 \
+  && rm -f /tmp/allowlist.txt /tmp/denylist.txt /tmp/hosts-to-filter.awk
 
 COPY --from=browser-trace-builder /src/dist/browser-trace /usr/local/bin/browser-trace
 RUN chmod +x /usr/local/bin/browser-trace
