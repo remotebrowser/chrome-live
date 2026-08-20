@@ -20,6 +20,7 @@ from urllib.request import urlopen
 import logfire
 import websockets
 
+import events
 import recording as rec
 import server as http_server
 import traffic
@@ -41,6 +42,8 @@ class Config:
     log_level: str = "INFO"
     # Recording
     recording_dir: str = ""  # defaults to /tmp/recordings
+    # JSONL sink for CDP events, served by `GET /logs`.
+    event_log_path: str = ""  # defaults to /tmp/browser-trace-events.jsonl
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
@@ -68,6 +71,7 @@ class Config:
             traceparent=tp if tp else None,
             log_level=values.get("LOG_LEVEL", "INFO").upper(),
             recording_dir=values.get("RECORDING_DIR", ""),
+            event_log_path=values.get("EVENT_LOG_PATH", ""),
             http_host=values.get("HTTP_HOST", "0.0.0.0"),
             http_port=int(values.get("BROWSER_TRACE_PORT", "8088")),
         )
@@ -169,6 +173,7 @@ def emit_cdp_event(
     attrs = {k: v for k, v in attrs.items() if v is not None}
     if extra:
         attrs.update(extra)
+    events.record({"event": event, **attrs})
     log_func = (
         logfire.error
         if error_text is not None
@@ -236,6 +241,10 @@ def apply_config(new: Config) -> None:
     )
     rec.configure(recordings_dir=recordings_dir)
     print(f"{_log_prefix} Recordings dir: {recordings_dir}", flush=True)
+
+    event_log_path = Path(new.event_log_path).resolve() if new.event_log_path else None
+    events.configure(event_log_path)
+    print(f"{_log_prefix} Event log: {events.get_path()}", flush=True)
 
 
 def get_browser_ws_url(host: str = "127.0.0.1", port: int = 9222) -> str:
