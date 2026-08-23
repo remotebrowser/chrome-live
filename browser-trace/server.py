@@ -13,8 +13,8 @@ Endpoints:
     GET /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
-    GET /logs                      Every CDP event this process has emitted, from
-                                   the JSONL sink in `events.py`. Unpaginated —
+    GET /logs                      Every application log record, from the JSONL
+                                   sink in `logs.py`. Unpaginated —
                                    the machine is ephemeral, so the whole history
                                    is small enough to return at once.
 
@@ -27,7 +27,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-import events
+import logs
 import recording as rec
 import traffic
 
@@ -107,7 +107,7 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
 
 
 async def handle_logs(request: web.Request) -> web.Response:
-    return web.json_response({"logs": events.read_all()})
+    return web.json_response({"logs": logs.read_all()})
 
 
 async def handle_traffic(request: web.Request) -> web.Response:

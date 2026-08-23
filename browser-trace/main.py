@@ -6,6 +6,7 @@ forwards tinyproxy log lines from stdin to Logfire when invoked in
 import argparse
 import asyncio
 import json
+import logging
 import os
 import re
 import signal
@@ -20,7 +21,7 @@ from urllib.request import urlopen
 import logfire
 import websockets
 
-import events
+import logs
 import recording as rec
 import server as http_server
 import traffic
@@ -42,8 +43,8 @@ class Config:
     log_level: str = "INFO"
     # Recording
     recording_dir: str = ""  # defaults to /tmp/recordings
-    # JSONL sink for CDP events, served by `GET /logs`.
-    event_log_path: str = ""  # defaults to /tmp/browser-trace-events.jsonl
+    # JSONL sink for application logs, served by `GET /logs`.
+    event_log_path: str = ""  # defaults to /tmp/browser-trace-logs.jsonl
     # HTTP server for retrieving recordings (cdp mode only)
     http_host: str = "0.0.0.0"
     http_port: int = 8088
@@ -105,6 +106,10 @@ _config = Config()
 # clear these come from the browser-trace shipper, not from chrome's CDP or
 # the underlying tinyproxy service.
 _log_prefix: str = "[browser-trace]"
+_logger = logging.getLogger("browser-trace")
+_NOTICE_LEVEL = 25
+logging.addLevelName(_NOTICE_LEVEL, "NOTICE")
+_logfire_configured = False
 
 
 # CAPTCHA vendor classifier, run via Runtime.evaluate on every main-frame
@@ -141,12 +146,12 @@ _probe_tasks: set[asyncio.Task] = set()
 TRAFFIC_REPORT_INTERVAL = 60.0
 
 
-def _emit_with_traceparent(log_func, msg: str, attrs: dict) -> None:
+def _emit_with_traceparent(level: int, msg: str, attrs: dict) -> None:
     if _config.traceparent:
         with logfire.attach_context({"traceparent": _config.traceparent}):
-            log_func(msg, **attrs)
+            _logger.log(level, msg, extra=attrs)
     else:
-        log_func(msg, **attrs)
+        _logger.log(level, msg, extra=attrs)
 
 
 def emit_cdp_event(
@@ -173,12 +178,11 @@ def emit_cdp_event(
     attrs = {k: v for k, v in attrs.items() if v is not None}
     if extra:
         attrs.update(extra)
-    events.record({"event": event, **attrs})
-    log_func = (
-        logfire.error
+    level = (
+        logging.ERROR
         if error_text is not None
         or (status_code is not None and status_code >= 400)
-        else logfire.info
+        else logging.INFO
     )
     msg = f"{_log_prefix} {event}"
     if tab_url:
@@ -187,18 +191,20 @@ def emit_cdp_event(
         msg += f": {status_code}"
     if error_text:
         msg += f": {error_text}"
-    _emit_with_traceparent(log_func, msg, attrs)
+    _emit_with_traceparent(level, msg, {"event": event, **attrs})
 
 
 def apply_config(new: Config) -> None:
     """Apply a new config, reconfiguring logfire if needed."""
-    global _config
+    global _config, _logfire_configured
     old = _config
     _config = new
 
     if (
-        new.logfire_token != old.logfire_token
+        not _logfire_configured
+        or new.logfire_token != old.logfire_token
         or new.service_name != old.service_name
+        or new.environment != old.environment
         or new.log_level != old.log_level
     ):
         logfire.configure(
@@ -220,19 +226,28 @@ def apply_config(new: Config) -> None:
             # `LOG_LEVEL=DEBUG` in the config file to surface them.
             min_level=_logfire_min_level(new.log_level),
         )
-        if new.logfire_token:
-            print(
-                f"{_log_prefix} Logfire configured: service={new.service_name} environment={new.environment}",
-                flush=True,
-            )
-        else:
-            print(f"{_log_prefix} Logfire token not configured", flush=True)
+        _logfire_configured = True
+
+    event_log_path = Path(new.event_log_path).resolve() if new.event_log_path else None
+    logs.configure(
+        _logger,
+        path=event_log_path,
+        logfire_level=_logging_level(new.log_level),
+        stdout_level=_logging_level(new.log_level),
+    )
+
+    if new.logfire_token:
+        _logger.info(
+            f"{_log_prefix} Logfire configured: service={new.service_name} environment={new.environment}"
+        )
+    else:
+        _logger.info(f"{_log_prefix} Logfire token not configured")
 
     if new.traceparent != old.traceparent:
         if new.traceparent:
-            print(f"{_log_prefix} Updated traceparent: {new.traceparent[:20]}...", flush=True)
+            _logger.info(f"{_log_prefix} Updated traceparent: {new.traceparent[:20]}...")
         else:
-            print(f"{_log_prefix} Traceparent cleared", flush=True)
+            _logger.info(f"{_log_prefix} Traceparent cleared")
 
     recordings_dir = (
         Path(new.recording_dir).resolve()
@@ -240,11 +255,8 @@ def apply_config(new: Config) -> None:
         else Path("/tmp/recordings")
     )
     rec.configure(recordings_dir=recordings_dir)
-    print(f"{_log_prefix} Recordings dir: {recordings_dir}", flush=True)
-
-    event_log_path = Path(new.event_log_path).resolve() if new.event_log_path else None
-    events.configure(event_log_path)
-    print(f"{_log_prefix} Event log: {events.get_path()}", flush=True)
+    _logger.info(f"{_log_prefix} Recordings dir: {recordings_dir}")
+    _logger.info(f"{_log_prefix} Log file: {logs.get_path()}")
 
 
 def get_browser_ws_url(host: str = "127.0.0.1", port: int = 9222) -> str:
@@ -280,9 +292,8 @@ def emit_navigation(session: dict, url: str, status_code: int) -> None:
         status_code=status_code,
         event_timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    print(
-        f"{_log_prefix} navigation: tab={session.get('target_id', '')[:8]} status={status_code} url={url}",
-        flush=True,
+    _logger.info(
+        f"{_log_prefix} navigation: tab={session.get('target_id', '')[:8]} status={status_code} url={url}"
     )
 
 
@@ -294,9 +305,8 @@ def emit_captcha_detected(session: dict, url: str, kind: str) -> None:
         captcha_kind=kind,
         event_timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    print(
-        f"{_log_prefix} captcha_detected: tab={session.get('target_id', '')[:8]} kind={kind} url={url}",
-        flush=True,
+    _logger.info(
+        f"{_log_prefix} captcha_detected: tab={session.get('target_id', '')[:8]} kind={kind} url={url}"
     )
 
 
@@ -348,9 +358,8 @@ def emit_navigation_failed(
         event_timestamp=datetime.now(timezone.utc).isoformat(),
     )
     frame_tag = "main" if is_main_frame else "iframe"
-    print(
-        f"{_log_prefix} navigation_failed: tab={session.get('target_id', '')[:8]} frame={frame_tag} error={error_text} url={url}",
-        flush=True,
+    _logger.error(
+        f"{_log_prefix} navigation_failed: tab={session.get('target_id', '')[:8]} frame={frame_tag} error={error_text} url={url}"
     )
 
 
@@ -380,12 +389,11 @@ def emit_tab_traffic(tab: traffic.TabTraffic, final: bool) -> None:
     top = ", ".join(
         f"{host}={traffic.human_bytes(byte_count)}" for host, byte_count in hosts[:3]
     )
-    print(
+    _logger.info(
         f"{_log_prefix} tab_traffic: tab={tab.target_id[:8]} "
         f"total={traffic.human_bytes(tab.bytes_received)} "
         f"delta={traffic.human_bytes(delta)} requests={tab.requests} "
-        f"final={final} top=[{top}] url={tab.url}",
-        flush=True,
+        f"final={final} top=[{top}] url={tab.url}"
     )
 
 
@@ -467,9 +475,8 @@ async def handle_event(ws, event: dict) -> None:
                 tab_url=target_info.get("url", ""),
                 event_timestamp=datetime.now(timezone.utc).isoformat(),
             )
-            print(
-                f"{_log_prefix} tab_opened: id={target_info.get('targetId', '')[:8]} url={target_info.get('url', '')}",
-                flush=True,
+            _logger.info(
+                f"{_log_prefix} tab_opened: id={target_info.get('targetId', '')[:8]} url={target_info.get('url', '')}"
             )
 
     elif method == "Target.attachedToTarget":
@@ -493,10 +500,7 @@ async def handle_event(ws, event: dict) -> None:
             try:
                 await rec.start_recording(sid, target_id, ws, send_cdp, url)
             except Exception as e:
-                print(
-                    f"{_log_prefix} failed to record tab {sid[:8]}: {e}",
-                    flush=True,
-                )
+                _logger.exception(f"{_log_prefix} failed to record tab {sid[:8]}: {e}")
 
     elif method == "Target.detachedFromTarget":
         sid = params.get("sessionId", "")
@@ -629,12 +633,12 @@ async def watch_config(config_path: str, interval: float = 1.0) -> None:
             if mtime != last_mtime:
                 last_mtime = mtime
                 apply_config(Config.from_file(config_path))
-                print(f"{_log_prefix} Config file updated: {config_path}", flush=True)
+                _logger.info(f"{_log_prefix} Config file updated: {config_path}")
         except FileNotFoundError:
             if last_mtime is not None:
                 last_mtime = None
                 apply_config(Config())
-                print(f"{_log_prefix} Config file removed, reverted to defaults", flush=True)
+                _logger.warning(f"{_log_prefix} Config file removed, reverted to defaults")
         await asyncio.sleep(interval)
 
 
@@ -645,14 +649,14 @@ async def connect_cdp(poll_interval: float = 5.0) -> None:
         try:
             ws_url = get_browser_ws_url(host=host, port=port)
         except (OSError, Exception):
-            print(f"{_log_prefix} CDP not reachable at {host}:{port} — retrying in {poll_interval}s", flush=True)
+            _logger.warning(f"{_log_prefix} CDP not reachable at {host}:{port}; retrying in {poll_interval}s")
             await asyncio.sleep(poll_interval)
             continue
 
-        print(f"{_log_prefix} Connecting to {ws_url}", flush=True)
+        _logger.info(f"{_log_prefix} Connecting to {ws_url}")
         try:
             async with websockets.connect(ws_url, max_size=50 * 1024 * 1024) as ws:
-                print(f"{_log_prefix} Connected to CDP", flush=True)
+                _logger.info(f"{_log_prefix} Connected to CDP")
 
                 await send_cdp(ws, "Target.setDiscoverTargets", {"discover": True})
                 await send_cdp(
@@ -677,7 +681,7 @@ async def connect_cdp(poll_interval: float = 5.0) -> None:
 
                     await handle_event(ws, event)
         except (OSError, websockets.exceptions.WebSocketException) as exc:
-            print(f"{_log_prefix} CDP connection lost ({exc}) — retrying in {poll_interval}s", flush=True)
+            _logger.warning(f"{_log_prefix} CDP connection lost ({exc}); retrying in {poll_interval}s")
             await rec.stop_all()
             # Finalize byte tallies before dropping session state, or they go
             # with it. Tabs that survive the drop re-attach under a new session
@@ -707,13 +711,12 @@ async def run(config_path: str) -> None:
     runner = None
     try:
         runner = await http_server.start_server(_config.http_host, _config.http_port)
-        print(
+        _logger.info(
             f"{_log_prefix} Recordings HTTP server listening on "
-            f"{_config.http_host}:{_config.http_port}",
-            flush=True,
+            f"{_config.http_host}:{_config.http_port}"
         )
     except Exception as e:
-        print(f"{_log_prefix} Failed to start recordings HTTP server: {e}", flush=True)
+        _logger.exception(f"{_log_prefix} Failed to start recordings HTTP server: {e}")
 
     try:
         # Wait until a signal fires or cdp_task ends on its own
@@ -730,7 +733,7 @@ async def run(config_path: str) -> None:
         flush_closed_tabs(*traffic.close_all())
         if runner is not None:
             await runner.cleanup()
-        print(f"{_log_prefix} Shutting down", flush=True)
+        _logger.info(f"{_log_prefix} Shutting down")
 
 
 # Tinyproxy emits lines like:
@@ -744,40 +747,11 @@ TINYPROXY_LEVEL_TO_LOGFIRE_METHOD: dict[str, str] = {
     "WARNING": "warn",
     "NOTICE": "notice",
     # CONNECT + INFO are per-request volume noise (every HTTPS subresource emits
-    # 2–3 lines). They still go to Logfire at debug severity so the UI keeps
-    # them, but at `LOG_LEVEL=INFO` (default) they don't tee to stdout / Fly
-    # logs — see `_should_tee`.
+    # 2–3 lines). They are retained in `/logs`, but filtered from Fly logs and
+    # Logfire unless `LOG_LEVEL=DEBUG`.
     "CONNECT": "debug",
     "INFO": "debug",
 }
-
-# Logfire severity ranks (matching the OTel severityNumber buckets) so the tee
-# threshold can compare across method names and the user-facing LOG_LEVEL.
-_LOGFIRE_METHOD_RANK: dict[str, int] = {
-    "debug": 5,
-    "info": 9,
-    "notice": 10,
-    "warn": 13,
-    "error": 17,
-    "fatal": 21,
-}
-_LOG_LEVEL_RANK: dict[str, int] = {
-    "DEBUG": 5,
-    "INFO": 9,
-    "NOTICE": 10,
-    "WARN": 13,
-    "WARNING": 13,
-    "ERROR": 17,
-    "FATAL": 21,
-    "CRITICAL": 21,
-}
-
-
-def _should_tee(method_name: str, log_level: str) -> bool:
-    line_rank = _LOGFIRE_METHOD_RANK.get(method_name, 9)
-    threshold = _LOG_LEVEL_RANK.get(log_level.upper(), 9)
-    return line_rank >= threshold
-
 
 # Map our LOG_LEVEL value to the lowercase `LevelName` strings that
 # `logfire.configure(min_level=...)` accepts. Unknown values default to `info`.
@@ -795,6 +769,22 @@ _LOG_LEVEL_TO_LOGFIRE_NAME: dict[str, str] = {
 
 def _logfire_min_level(log_level: str) -> str:
     return _LOG_LEVEL_TO_LOGFIRE_NAME.get(log_level.upper(), "info")
+
+
+_LOG_LEVEL_TO_PYTHON_LEVEL: dict[str, int] = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "NOTICE": _NOTICE_LEVEL,
+    "WARN": logging.WARNING,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "FATAL": logging.CRITICAL,
+    "CRITICAL": logging.CRITICAL,
+}
+
+
+def _logging_level(log_level: str) -> int:
+    return _LOG_LEVEL_TO_PYTHON_LEVEL.get(log_level.upper(), logging.INFO)
 
 
 def parse_tinyproxy_level(line: str) -> str:
@@ -845,12 +835,13 @@ def classify_tinyproxy_line(line: str) -> tuple[str, str, str]:
 
 
 def emit_tinyproxy_event(body: str, level: str, method_name: str) -> None:
-    log_func = getattr(logfire, method_name, logfire.info)
     attrs = {
         "tinyproxy_level": level or "UNKNOWN",
         "event_timestamp": datetime.now(timezone.utc).isoformat(),
     }
-    _emit_with_traceparent(log_func, f"{_log_prefix} {body}", attrs)
+    _emit_with_traceparent(
+        _logging_level(method_name), f"{_log_prefix} {body}", attrs
+    )
 
 
 def watch_config_thread(config_path: str, interval: float = 1.0) -> None:
@@ -861,17 +852,17 @@ def watch_config_thread(config_path: str, interval: float = 1.0) -> None:
             if mtime != last_mtime:
                 last_mtime = mtime
                 apply_config(Config.from_file(config_path))
-                print(f"{_log_prefix} Config file updated: {config_path}", flush=True)
+                _logger.info(f"{_log_prefix} Config file updated: {config_path}")
         except FileNotFoundError:
             if last_mtime is not None:
                 last_mtime = None
                 apply_config(Config())
-                print(f"{_log_prefix} Config file removed, reverted to defaults", flush=True)
+                _logger.warning(f"{_log_prefix} Config file removed, reverted to defaults")
         time.sleep(interval)
 
 
 def run_tinyproxy(config_path: str) -> None:
-    print(f"{_log_prefix} Starting tinyproxy log shipper, reading from stdin", flush=True)
+    _logger.info(f"{_log_prefix} Starting tinyproxy log shipper, reading from stdin")
     watcher = threading.Thread(
         target=watch_config_thread, args=(config_path,), daemon=True
     )
@@ -882,16 +873,11 @@ def run_tinyproxy(config_path: str) -> None:
         if not line:
             continue
         body, level, method_name = classify_tinyproxy_line(line)
-        # Tee to stdout (Fly logs) only when the line's severity meets the
-        # configured LOG_LEVEL threshold. Logfire emission below honours the
-        # same threshold via `logfire.configure(min_level=...)`.
-        if _should_tee(method_name, _config.log_level):
-            print(f"{_log_prefix} {body}", flush=True)
         try:
             emit_tinyproxy_event(body, level, method_name)
         except Exception as e:
-            print(f"{_log_prefix} failed to emit tinyproxy event: {e}", flush=True)
-    print(f"{_log_prefix} stdin closed, shutting down", flush=True)
+            _logger.exception(f"{_log_prefix} failed to emit tinyproxy event: {e}")
+    _logger.info(f"{_log_prefix} stdin closed, shutting down")
 
 
 def run_record(args) -> int:
@@ -957,15 +943,14 @@ def main() -> None:
     _log_prefix = f"[{args.cmd}-log]"
 
     config = Config.from_file(args.config)
-    if not os.path.exists(args.config):
-        print(
-            f"{_log_prefix} Config file not found: {args.config} — starting with defaults, watching for file",
-            flush=True,
-        )
     apply_config(config)
+    if not os.path.exists(args.config):
+        _logger.warning(
+            f"{_log_prefix} Config file not found: {args.config}; starting with defaults, watching for file"
+        )
 
     if args.cmd == "cdp":
-        print(f"{_log_prefix} Starting browser trace service (CDP mode)", flush=True)
+        _logger.info(f"{_log_prefix} Starting browser trace service (CDP mode)")
         try:
             asyncio.run(run(args.config))
         except KeyboardInterrupt:

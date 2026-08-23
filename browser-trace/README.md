@@ -41,7 +41,7 @@ CDP_PORT=9222
 | `CDP_HOST`              | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
 | `CDP_PORT`              | Chrome DevTools Protocol port (default: `9222`)                                                                                                                                                                                                                                                                             | No       |
 | `RECORDING_DIR`         | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
-| `EVENT_LOG_PATH`        | JSONL file every CDP event is appended to, served by `GET /logs` (default: `/tmp/browser-trace-events.jsonl`)                                                                                                                                                                                                               | No       |
+| `EVENT_LOG_PATH`        | JSONL file containing every application log record, served by `GET /logs` (default: `/tmp/browser-trace-logs.jsonl`)                                                                                                                                                                                                         | No       |
 
 The config file is watched for changes every 2 seconds, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
 
@@ -61,7 +61,7 @@ uv run main.py cdp .env
 4. Emit `navigation` events (with HTTP status codes) for top-frame document navigations
 5. Emit `tab_traffic` events with per-tab / per-host byte totals (see [Traffic accounting](#traffic-accounting))
 6. Send all events to Logfire if a token is configured
-7. Append every event to `EVENT_LOG_PATH` as JSONL, retrievable via `GET /logs` (see [Event log](#event-log))
+7. Send every application log record to `EVENT_LOG_PATH` as JSONL, retrievable via `GET /logs` (see [Logs](#logs))
 
 ### `tinyproxy` — tinyproxy log shipper
 
@@ -94,9 +94,9 @@ serving it, so a repeat is harmless.
 
 Recording is always-on in `cdp` mode: a screencast is captured for every tab and finalized when the tab closes. Recordings land in `RECORDING_DIR` as `<id>.mp4` + `<id>.json` sidecar files.
 
-## Event log
+## Logs
 
-Every event `cdp` mode emits — `tab_opened`, `navigation`, `navigation_failed`, `captcha_detected`, `tab_traffic` — is appended as one JSON object per line to `EVENT_LOG_PATH`.
+Every application record is appended as one JSON object per line to `EVENT_LOG_PATH`. `GET /logs` returns that history, including CDP events, tinyproxy lines, recording lifecycle messages, configuration changes, and connection errors. Records include `timestamp`, `level`, and `message`; CDP and tinyproxy logs retain their structured fields such as `event`, `tab_id`, and `tinyproxy_level`.
 
 ## Traffic accounting
 

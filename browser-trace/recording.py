@@ -16,6 +16,7 @@ bucket credentials of its own.
 import asyncio
 import base64
 import json
+import logging
 import secrets
 import shutil
 import string
@@ -23,6 +24,9 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+_logger = logging.getLogger("browser-trace.recording")
 
 
 # Screencast frames are change-driven (Page.startScreencast has no frame-rate parameter),
@@ -163,7 +167,7 @@ async def start_recording(
             session_id=session_id,
         )
     except Exception as e:
-        print(f"[recording] start_screencast failed for {session_id}: {e}", flush=True)
+        _logger.exception(f"[recording] start_screencast failed for {session_id}: {e}")
         _active_recording_by_session.pop(session_id, None)
         shutil.rmtree(frames_dir, ignore_errors=True)
         raise
@@ -174,7 +178,7 @@ async def start_recording(
         _recording_watchdog(session_id, recording)
     )
 
-    print(f"[recording] started {recording_id} for session {session_id[:8]}", flush=True)
+    _logger.info(f"[recording] started {recording_id} for session {session_id[:8]}")
     return recording_id
 
 
@@ -188,10 +192,9 @@ async def _recording_watchdog(session_id: str, recording: _ActiveRecording) -> N
     # session_id or a cancellation delivered a beat late).
     if _active_recording_by_session.get(session_id) is not recording:
         return
-    print(
+    _logger.warning(
         f"[recording] {recording.meta.recording_id} hit max duration "
-        f"({_MAX_RECORDING_SECONDS}s), force-stopping",
-        flush=True,
+        f"({_MAX_RECORDING_SECONDS}s), force-stopping"
     )
     recording.meta.timed_out = True
     await stop_recording(session_id)
@@ -212,7 +215,7 @@ def handle_screencast_frame(event_params: dict, session_id: str, ws, send_cdp_fn
         recording.frame_count += 1
         recording.frame_times.append(asyncio.get_event_loop().time())
     except Exception as e:
-        print(f"[recording] frame write failed: {e}", flush=True)
+        _logger.exception(f"[recording] frame write failed: {e}")
         return
 
     if cdp_session_id is not None:
@@ -257,7 +260,7 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
 
     actual_frames = len(list(recording.frames_dir.glob("*.jpg")))
     if actual_frames == 0:
-        print(f"[recording] {recording.meta.recording_id} has no frames, discarding", flush=True)
+        _logger.warning(f"[recording] {recording.meta.recording_id} has no frames, discarding")
         shutil.rmtree(recording.frames_dir, ignore_errors=True)
         # No MP4, but a timed-out tab still gets a sidecar so it surfaces.
         if recording.meta.timed_out:
@@ -268,14 +271,13 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
         storage_key = await _encode_and_store(recording)
         recording.meta.storage_key = storage_key
         await _write_meta(recording.meta)
-        print(
+        _logger.info(
             f"[recording] stopped {recording.meta.recording_id} "
             f"({actual_frames} frames, {elapsed:.1f}s → {recording.meta.video_seconds:.1f}s video) "
-            f"→ {storage_key}",
-            flush=True,
+            f"→ {storage_key}"
         )
     except Exception as e:
-        print(f"[recording] encode/store failed for {recording.meta.recording_id}: {e}", flush=True)
+        _logger.exception(f"[recording] encode/store failed for {recording.meta.recording_id}: {e}")
     finally:
         shutil.rmtree(recording.frames_dir, ignore_errors=True)
 
