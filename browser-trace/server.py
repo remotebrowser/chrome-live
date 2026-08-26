@@ -13,6 +13,10 @@ Endpoints:
     GET /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
+    GET /logs                      Every application log record, from the JSONL
+                                   sink in `logs.py`. Unpaginated —
+                                   the machine is ephemeral, so the whole history
+                                   is small enough to return at once.
 
 The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
@@ -23,6 +27,7 @@ from pathlib import Path
 
 from aiohttp import web
 
+import logs
 import recording as rec
 import traffic
 
@@ -101,6 +106,10 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
     )
 
 
+async def handle_logs(request: web.Request) -> web.Response:
+    return web.json_response({"logs": logs.read_all()})
+
+
 async def handle_traffic(request: web.Request) -> web.Response:
     raw = request.query.get("hosts")
     if raw is None:
@@ -122,6 +131,7 @@ def build_app() -> web.Application:
             web.get("/recordings", handle_list),
             web.get("/recordings/{recording_id}/video", handle_video),
             web.get("/traffic", handle_traffic),
+            web.get("/logs", handle_logs),
         ]
     )
     return app
