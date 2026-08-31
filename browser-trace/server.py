@@ -13,10 +13,12 @@ Endpoints:
     GET /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
-    GET /logs                      Every application log record, from the JSONL
-                                   sink in `logs.py`. Unpaginated —
-                                   the machine is ephemeral, so the whole history
-                                   is small enough to return at once.
+    GET /logs                      Application log records from the JSONL sink in
+                                   `logs.py`, newest first. `?limit=N` sets the
+                                   page size (default 100, max 1000) and
+                                   `?before=N` returns records earlier than that
+                                   record's `line`, so feeding back the oldest
+                                   `line` of a page walks into the past.
 
 The recordings dir is read from `recording.get_recordings_dir()` on every
 request rather than captured at startup, so it tracks config hot-reloads.
@@ -33,6 +35,8 @@ import traffic
 
 _DEFAULT_HOST_LIMIT = 20
 _MAX_HOST_LIMIT = 1000
+_DEFAULT_LOG_LIMIT = 100
+_MAX_LOG_LIMIT = 1000
 
 
 def _list_recordings() -> list[dict]:
@@ -106,8 +110,39 @@ async def handle_video(request: web.Request) -> web.StreamResponse:
     )
 
 
+def _bounded_int(
+    request: web.Request,
+    name: str,
+    *,
+    default: int | None,
+    minimum: int,
+    maximum: int | None = None,
+) -> int | None:
+    """Parse an in-range integer query param, 400ing rather than clamping.
+
+    Clamping would make a short page ambiguous — end of history, or hit the
+    ceiling? — so an out-of-range ask is an error the caller can see.
+    """
+    raw = request.query.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise web.HTTPBadRequest(text=f"{name} must be an integer, got {raw!r}")
+    if value < minimum or (maximum is not None and value > maximum):
+        allowed = f"{minimum}..{maximum}" if maximum is not None else f">= {minimum}"
+        raise web.HTTPBadRequest(text=f"{name} must be {allowed}, got {value}")
+    return value
+
+
 async def handle_logs(request: web.Request) -> web.Response:
-    return web.json_response({"logs": logs.read_all()})
+    limit = _bounded_int(
+        request, "limit", default=_DEFAULT_LOG_LIMIT, minimum=1, maximum=_MAX_LOG_LIMIT
+    )
+    before = _bounded_int(request, "before", default=None, minimum=1)
+    records, total = logs.read_log(limit=limit, before=before)
+    return web.json_response({"logs": records, "total": total, "limit": limit})
 
 
 async def handle_traffic(request: web.Request) -> web.Response:
