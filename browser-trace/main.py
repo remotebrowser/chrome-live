@@ -21,6 +21,7 @@ from urllib.request import urlopen
 import logfire
 import websockets
 
+import cdp
 import logs
 import recording as rec
 import server as http_server
@@ -84,17 +85,11 @@ sessions: dict[str, dict] = {}
 # Reverse map: target_id -> session_id (for recording lookups)
 target_sessions: dict[str, str] = {}
 
-# Maps CDP message ID -> (method, sessionId) for response correlation
-pending_commands: dict[int, tuple[str, str | None]] = {}
-
 # Maps Network.requestId -> {url, frame_id, session_id} for Document-type requests.
 # Populated on Network.requestWillBeSent, consumed on Network.responseReceived
 # (success) or Network.loadingFailed (failure). Bounded because every entry is
 # either matched within a few seconds or the session goes away.
 network_requests: dict[str, dict] = {}
-
-# Auto-incrementing CDP message ID
-_msg_id = 0
 
 # Active config, updated by the file watcher
 _config = Config()
@@ -266,20 +261,6 @@ def get_browser_ws_url(host: str = "127.0.0.1", port: int = 9222) -> str:
     return data["webSocketDebuggerUrl"]
 
 
-async def send_cdp(
-    ws, method: str, params: dict | None = None, session_id: str | None = None
-) -> int:
-    """Send a CDP command over the websocket. Returns the message ID."""
-    global _msg_id
-    _msg_id += 1
-    msg: dict = {"id": _msg_id, "method": method, "params": params or {}}
-    if session_id is not None:
-        msg["sessionId"] = session_id
-    pending_commands[_msg_id] = (method, session_id)
-    await ws.send(json.dumps(msg))
-    return _msg_id
-
-
 def emit_navigation(session: dict, url: str, status_code: int) -> None:
     # Remember the main-frame URL so an async CAPTCHA probe (fired later on
     # Page.domContentEventFired) can attribute its result to this navigation.
@@ -310,7 +291,7 @@ def emit_captcha_detected(session: dict, url: str, kind: str) -> None:
     )
 
 
-async def probe_captcha(ws, session_id: str, probe_url: str) -> None:
+async def probe_captcha(conn: cdp.Connection, session_id: str, probe_url: str) -> None:
     """Run the CAPTCHA classifier several times after DOMContentLoaded to catch
     vendors whose widgets render asynchronously. Fire-and-forget: each probe's
     result comes back as a Runtime.evaluate response handled in handle_response,
@@ -324,8 +305,7 @@ async def probe_captcha(ws, session_id: str, probe_url: str) -> None:
         if session is None or session.get("captcha_probe_url") != probe_url:
             return
         try:
-            await send_cdp(
-                ws,
+            await conn.send(
                 "Runtime.evaluate",
                 {"expression": CAPTCHA_CLASSIFIER_JS, "returnByValue": True},
                 session_id=session_id,
@@ -334,14 +314,14 @@ async def probe_captcha(ws, session_id: str, probe_url: str) -> None:
             return  # Connection dropped; the reconnect path will re-arm probes.
 
 
-def schedule_captcha_probe(ws, session_id: str, probe_url: str) -> None:
+def schedule_captcha_probe(conn: cdp.Connection, session_id: str, probe_url: str) -> None:
     """Arm a fresh multi-shot CAPTCHA probe for a navigation, resetting the
     per-navigation dedup set so this page's detections are reported independently
     of the previous one."""
     session = sessions[session_id]
     session["captcha_probe_url"] = probe_url
     session["captcha_reported"] = set()
-    task = asyncio.create_task(probe_captcha(ws, session_id, probe_url))
+    task = asyncio.create_task(probe_captcha(conn, session_id, probe_url))
     _probe_tasks.add(task)
     task.add_done_callback(_probe_tasks.discard)
 
@@ -427,14 +407,13 @@ def flush_pending(session: dict) -> None:
             emit_navigation(session, pending["url"], pending["status_code"])
 
 
-async def handle_response(event: dict) -> None:
+async def handle_response(conn: cdp.Connection, event: dict) -> None:
     """Handle CDP command responses (e.g., Page.getFrameTree result)."""
-    msg_id = event.get("id")
-    if msg_id not in pending_commands:
+    reply = conn.take_reply(event)
+    if reply is None:
         return
 
-    method, session_id = pending_commands.pop(msg_id)
-    result = event.get("result", {})
+    method, session_id, result = reply
 
     if method == "Page.getFrameTree" and session_id and session_id in sessions:
         # Extract main frame ID from the frame tree
@@ -460,7 +439,7 @@ async def handle_response(event: dict) -> None:
                 emit_captcha_detected(session, session.get("captcha_probe_url", ""), value)
 
 
-async def handle_event(ws, event: dict) -> None:
+async def handle_event(conn: cdp.Connection, event: dict) -> None:
     """Process a CDP event."""
     method = event.get("method", "")
     params = event.get("params", {})
@@ -494,11 +473,11 @@ async def handle_event(ws, event: dict) -> None:
             }
             target_sessions[target_id] = sid
             traffic.open_tab(sid, target_id, url)
-            await send_cdp(ws, "Page.enable", session_id=sid)
-            await send_cdp(ws, "Network.enable", session_id=sid)
-            await send_cdp(ws, "Page.getFrameTree", session_id=sid)
+            await conn.send("Page.enable", session_id=sid)
+            await conn.send("Network.enable", session_id=sid)
+            await conn.send("Page.getFrameTree", session_id=sid)
             try:
-                await rec.start_recording(sid, target_id, ws, send_cdp, url)
+                await rec.start_recording(conn, sid, target_id, url)
             except Exception as e:
                 _logger.exception(f"{_log_prefix} failed to record tab {sid[:8]}: {e}")
 
@@ -516,7 +495,7 @@ async def handle_event(ws, event: dict) -> None:
         await rec.stop_recording(sid)
 
     elif method == "Page.screencastFrame" and session_id:
-        rec.handle_screencast_frame(params, session_id, ws, send_cdp)
+        rec.handle_screencast_frame(conn, params, session_id)
 
     elif method == "Page.frameNavigated" and session_id:
         frame = params.get("frame", {})
@@ -530,7 +509,7 @@ async def handle_event(ws, event: dict) -> None:
         # comes back as a Runtime.evaluate response handled in handle_response.
         # Probe several times (see CAPTCHA_PROBE_DELAYS) because most vendors
         # inject their widget after DOMContentLoaded.
-        schedule_captcha_probe(ws, session_id, sessions[session_id].get("last_url", ""))
+        schedule_captcha_probe(conn, session_id, sessions[session_id].get("last_url", ""))
 
     elif method == "Network.requestWillBeSent" and session_id:
         request_id = params.get("requestId", "")
@@ -642,6 +621,33 @@ async def watch_config(config_path: str, interval: float = 1.0) -> None:
         await asyncio.sleep(interval)
 
 
+async def run_session(conn: cdp.Connection) -> None:
+    await conn.send("Target.setDiscoverTargets", {"discover": True})
+    await conn.send(
+        "Target.setAutoAttach",
+        {
+            "autoAttach": True,
+            "waitForDebuggerOnStart": False,
+            "flatten": True,
+        },
+    )
+
+    async for event in conn.events():
+        if "id" in event and "method" not in event:
+            await handle_response(conn, event)
+            continue
+
+        await handle_event(conn, event)
+
+
+async def drop_session_state() -> None:
+    await rec.stop_all()
+    flush_closed_tabs(*traffic.close_all())
+    sessions.clear()
+    target_sessions.clear()
+    network_requests.clear()
+
+
 async def connect_cdp(poll_interval: float = 5.0) -> None:
     """Block until CDP is reachable, then run the session. Retries on failure."""
     while True:
@@ -657,40 +663,15 @@ async def connect_cdp(poll_interval: float = 5.0) -> None:
         try:
             async with websockets.connect(ws_url, max_size=50 * 1024 * 1024) as ws:
                 _logger.info(f"{_log_prefix} Connected to CDP")
-
-                await send_cdp(ws, "Target.setDiscoverTargets", {"discover": True})
-                await send_cdp(
-                    ws,
-                    "Target.setAutoAttach",
-                    {
-                        "autoAttach": True,
-                        "waitForDebuggerOnStart": False,
-                        "flatten": True,
-                    },
-                )
-
-                async for raw_msg in ws:
-                    try:
-                        event = json.loads(raw_msg)
-                    except json.JSONDecodeError:
-                        continue
-
-                    if "id" in event and "method" not in event:
-                        await handle_response(event)
-                        continue
-
-                    await handle_event(ws, event)
+                conn = cdp.Connection(ws)
+                try:
+                    await run_session(conn)
+                    _logger.info(f"{_log_prefix} CDP connection closed by Chrome")
+                finally:
+                    conn.close()
+                    await drop_session_state()
         except (OSError, websockets.exceptions.WebSocketException) as exc:
             _logger.warning(f"{_log_prefix} CDP connection lost ({exc}); retrying in {poll_interval}s")
-            await rec.stop_all()
-            # Finalize byte tallies before dropping session state, or they go
-            # with it. Tabs that survive the drop re-attach under a new session
-            # id and start a fresh tally; sum by tab_id to rejoin them.
-            flush_closed_tabs(*traffic.close_all())
-            sessions.clear()
-            target_sessions.clear()
-            pending_commands.clear()
-            network_requests.clear()
             await asyncio.sleep(poll_interval)
 
 
