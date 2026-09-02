@@ -25,6 +25,7 @@ import cdp
 import logs
 import recording as rec
 import server as http_server
+import thumbnail
 import traffic
 import upload as uploader
 
@@ -622,22 +623,23 @@ async def watch_config(config_path: str, interval: float = 1.0) -> None:
 
 
 async def run_session(conn: cdp.Connection) -> None:
-    await conn.send("Target.setDiscoverTargets", {"discover": True})
-    await conn.send(
-        "Target.setAutoAttach",
-        {
-            "autoAttach": True,
-            "waitForDebuggerOnStart": False,
-            "flatten": True,
-        },
-    )
+    with thumbnail.thumbnailer.attached(conn, sessions):
+        await conn.send("Target.setDiscoverTargets", {"discover": True})
+        await conn.send(
+            "Target.setAutoAttach",
+            {
+                "autoAttach": True,
+                "waitForDebuggerOnStart": False,
+                "flatten": True,
+            },
+        )
 
-    async for event in conn.events():
-        if "id" in event and "method" not in event:
-            await handle_response(conn, event)
-            continue
+        async for event in conn.events():
+            if "id" in event and "method" not in event:
+                await handle_response(conn, event)
+                continue
 
-        await handle_event(conn, event)
+            await handle_event(conn, event)
 
 
 async def drop_session_state() -> None:

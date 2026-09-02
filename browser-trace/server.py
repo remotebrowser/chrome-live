@@ -13,6 +13,8 @@ Endpoints:
     GET /traffic                   Live byte totals per tab and per host, from
                                    `traffic.py`. `?hosts=N` caps the process-wide
                                    host list (default 20).
+    GET /thumbnail                 A small JPEG of the current page, from
+                                   `thumbnail.py`. Cached for a few seconds.
     GET /logs                      Every application log record, from the JSONL
                                    sink in `logs.py`. Unpaginated —
                                    the machine is ephemeral, so the whole history
@@ -29,6 +31,7 @@ from aiohttp import web
 
 import logs
 import recording as rec
+import thumbnail
 import traffic
 
 _DEFAULT_HOST_LIMIT = 20
@@ -110,6 +113,22 @@ async def handle_logs(request: web.Request) -> web.Response:
     return web.json_response({"logs": logs.read_all()})
 
 
+async def handle_thumbnail(request: web.Request) -> web.Response:
+    try:
+        jpeg = await thumbnail.thumbnailer.capture()
+    except thumbnail.ThumbnailError as e:
+        raise web.HTTPServiceUnavailable(text=str(e)) from e
+    except TimeoutError as e:
+        raise web.HTTPGatewayTimeout(text="Chrome did not answer the screenshot") from e
+    return web.Response(
+        body=jpeg,
+        headers={
+            "Content-Type": "image/jpeg",
+            "Cache-Control": f"max-age={int(thumbnail.CACHE_SECONDS)}",
+        },
+    )
+
+
 async def handle_traffic(request: web.Request) -> web.Response:
     raw = request.query.get("hosts")
     if raw is None:
@@ -130,6 +149,7 @@ def build_app() -> web.Application:
             web.get("/health", handle_health),
             web.get("/recordings", handle_list),
             web.get("/recordings/{recording_id}/video", handle_video),
+            web.get("/thumbnail", handle_thumbnail),
             web.get("/traffic", handle_traffic),
             web.get("/logs", handle_logs),
         ]
