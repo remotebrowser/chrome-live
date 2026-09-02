@@ -329,6 +329,7 @@ async def _encode_and_store(recording: _ActiveRecording) -> str:
 
     cmd = [
         "ffmpeg", "-y",
+        "-threads", "1",
         "-f", "concat",
         "-safe", "0",
         "-i", str(concat_path),
