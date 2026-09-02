@@ -2,10 +2,8 @@
 
 import asyncio
 import base64
-import contextlib
 import logging
 import time
-from collections.abc import Iterator
 from typing import NamedTuple
 
 import cdp
@@ -42,22 +40,16 @@ class Thumbnailer:
         self._cache: _Cached | None = None
         self._lock = asyncio.Lock()
 
-    @contextlib.contextmanager
-    def attached(
-        self, conn: cdp.Connection, sessions: dict[str, dict]
-    ) -> Iterator[None]:
-        """Serve thumbnails from `conn` for as long as the block runs.
-
-        A connection outlives neither its tabs nor its session ids, so both the
-        source and any cached frame are dropped on the way out.
-        """
+    def attach(self, conn: cdp.Connection, sessions: dict[str, dict]) -> None:
+        """Serve thumbnails from `conn` until the next `detach`."""
         self._source = _Source(conn, sessions)
         self._cache = None
-        try:
-            yield
-        finally:
-            self._source = None
-            self._cache = None
+
+    def detach(self) -> None:
+        """Drop the connection. A cached frame goes with it: session ids do not
+        survive a reconnect, so it could never be served again anyway."""
+        self._source = None
+        self._cache = None
 
     async def capture(self) -> bytes:
         """JPEG bytes of the current page, at most `CACHE_SECONDS` old."""

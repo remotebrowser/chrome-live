@@ -623,26 +623,28 @@ async def watch_config(config_path: str, interval: float = 1.0) -> None:
 
 
 async def run_session(conn: cdp.Connection) -> None:
-    with thumbnail.thumbnailer.attached(conn, sessions):
-        await conn.send("Target.setDiscoverTargets", {"discover": True})
-        await conn.send(
-            "Target.setAutoAttach",
-            {
-                "autoAttach": True,
-                "waitForDebuggerOnStart": False,
-                "flatten": True,
-            },
-        )
+    await conn.send("Target.setDiscoverTargets", {"discover": True})
+    await conn.send(
+        "Target.setAutoAttach",
+        {
+            "autoAttach": True,
+            "waitForDebuggerOnStart": False,
+            "flatten": True,
+        },
+    )
 
-        async for event in conn.events():
-            if "id" in event and "method" not in event:
-                await handle_response(conn, event)
-                continue
+    thumbnail.thumbnailer.attach(conn, sessions)
 
-            await handle_event(conn, event)
+    async for event in conn.events():
+        if "id" in event and "method" not in event:
+            await handle_response(conn, event)
+            continue
+
+        await handle_event(conn, event)
 
 
 async def drop_session_state() -> None:
+    thumbnail.thumbnailer.detach()
     await rec.stop_all()
     flush_closed_tabs(*traffic.close_all())
     sessions.clear()
