@@ -25,6 +25,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import cdp
+
 
 _logger = logging.getLogger("browser-trace.recording")
 
@@ -73,9 +75,9 @@ class _ActiveRecording:
     frame_count: int
     started_ts: float
     # Held so stop_recording can tell Chrome to stop the screencast for this
-    # session (best-effort). ws may be stale/closed by stop time (reconnect).
-    ws: object
-    send_cdp_fn: object
+    # session (best-effort). The connection may be stale/closed by stop time
+    # (reconnect).
+    conn: cdp.Connection
     # Arrival time of each written frame, on the same monotonic clock as started_ts.
     frame_times: list[float] = field(default_factory=list)
     # Max-duration watchdog; cancelled by a normal stop.
@@ -104,10 +106,9 @@ def get_recordings_dir() -> Path:
 
 
 async def start_recording(
+    conn: cdp.Connection,
     session_id: str,
     target_id: str,
-    ws,
-    send_cdp_fn,
     url: str = "",
 ) -> str:
     """Start a screencast recording for the given CDP session.
@@ -138,8 +139,7 @@ async def start_recording(
         frames_dir=frames_dir,
         frame_count=0,
         started_ts=started_ts,
-        ws=ws,
-        send_cdp_fn=send_cdp_fn,
+        conn=conn,
     )
     _active_recording_by_session[session_id] = recording
 
@@ -148,14 +148,12 @@ async def start_recording(
         # doesn't paint hidden tabs, so without this only the foreground tab
         # produces screencast frames; with it every armed tab records
         # simultaneously and continuously (no gaps while backgrounded).
-        await send_cdp_fn(
-            ws,
+        await conn.send(
             "Emulation.setFocusEmulationEnabled",
             {"enabled": True},
             session_id=session_id,
         )
-        await send_cdp_fn(
-            ws,
+        await conn.send(
             "Page.startScreencast",
             {
                 "format": "jpeg",
@@ -200,7 +198,9 @@ async def _recording_watchdog(session_id: str, recording: _ActiveRecording) -> N
     await stop_recording(session_id)
 
 
-def handle_screencast_frame(event_params: dict, session_id: str, ws, send_cdp_fn) -> None:
+def handle_screencast_frame(
+    conn: cdp.Connection, event_params: dict, session_id: str
+) -> None:
     """Call this from the CDP event loop when Page.screencastFrame arrives."""
     recording = _active_recording_by_session.get(session_id)
     if recording is None:
@@ -220,8 +220,7 @@ def handle_screencast_frame(event_params: dict, session_id: str, ws, send_cdp_fn
 
     if cdp_session_id is not None:
         asyncio.create_task(
-            send_cdp_fn(
-                ws,
+            conn.send(
                 "Page.screencastFrameAck",
                 {"sessionId": cdp_session_id},
                 session_id=session_id,
@@ -248,9 +247,7 @@ async def stop_recording(session_id: str) -> RecordingMeta | None:
     # stale/duplicated stream and stalls. Harmless no-op if the ws is already
     # closed (reconnect) or the target detached.
     try:
-        await recording.send_cdp_fn(
-            recording.ws, "Page.stopScreencast", session_id=session_id
-        )
+        await recording.conn.send("Page.stopScreencast", session_id=session_id)
     except Exception:
         pass
 
@@ -329,6 +326,7 @@ async def _encode_and_store(recording: _ActiveRecording) -> str:
 
     cmd = [
         "ffmpeg", "-y",
+        "-threads", "1",
         "-f", "concat",
         "-safe", "0",
         "-i", str(concat_path),
