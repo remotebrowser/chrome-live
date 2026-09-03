@@ -25,6 +25,7 @@ import cdp
 import logs
 import recording as rec
 import server as http_server
+import thumbnail
 import traffic
 import upload as uploader
 
@@ -632,6 +633,8 @@ async def run_session(conn: cdp.Connection) -> None:
         },
     )
 
+    thumbnail.thumbnailer.attach(conn, sessions)
+
     async for event in conn.events():
         if "id" in event and "method" not in event:
             await handle_response(conn, event)
@@ -641,6 +644,7 @@ async def run_session(conn: cdp.Connection) -> None:
 
 
 async def drop_session_state() -> None:
+    thumbnail.thumbnailer.detach()
     await rec.stop_all()
     flush_closed_tabs(*traffic.close_all())
     sessions.clear()
