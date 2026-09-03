@@ -38,22 +38,41 @@ def get_path() -> Path:
     return _path
 
 
-def read_all() -> list[dict]:
-    """Return valid JSONL records in write order, tolerating a torn final line."""
+def read_log(*, limit: int, before: int | None = None) -> tuple[list[dict], int]:
+    """Return up to `limit` records newest-first, and the total record count.
+
+    `before` keeps only records earlier than that `line`, so feeding back the
+    oldest `line` of a page walks into the past. Line numbers stay valid across
+    calls because the file is only ever appended to.
+    """
+    records = _read_all()
+    total = len(records)
+    if before is not None:
+        records = [record for record in records if record["line"] < before]
+    records.reverse()
+    return records[:limit], total
+
+
+def _read_all() -> list[dict]:
+    """Return valid JSONL records in write order, tolerating a torn final line.
+
+    Each record carries its 1-based line number as ``line``; blank and torn
+    lines are skipped but still consume a number, so it names a real file line.
+    """
     try:
         with get_path().open() as file:
             lines = file.readlines()
-    except FileNotFoundError:
-        return []
     except OSError:
         return []
 
     records: list[dict] = []
-    for line in lines:
+    for number, line in enumerate(lines, start=1):
         try:
-            records.append(json.loads(line))
+            record = json.loads(line)
         except json.JSONDecodeError:
             continue
+        record["line"] = number
+        records.append(record)
     return records
 
 
