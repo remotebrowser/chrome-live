@@ -93,17 +93,22 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # image; the chromium s6 service picks which one to launch at runtime (default:
 # google-chrome-stable). CloakBrowser publishes no arm64 binary, so it stays
 # amd64-only; the TARGETARCH guard below keeps that step a no-op on arm64.
+# A venv, not --break-system-packages: pip cannot replace Ubuntu's
+# apt-installed typing-extensions (no RECORD file).
+ARG CLOAKBROWSER_PIP_VERSION=0.5.10
+ARG CLOAKBROWSER_VERSION=146.0.7680.177.5
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
-        python3-pip libgl1 libgl1-mesa-dri && \
-      pip3 install --break-system-packages cloakbrowser && \
-      python3 -m cloakbrowser install && \
+        python3-venv libgl1 libgl1-mesa-dri && \
+      python3 -m venv /tmp/cloakbrowser-venv && \
+      /tmp/cloakbrowser-venv/bin/pip install "cloakbrowser==${CLOAKBROWSER_PIP_VERSION}" && \
+      /tmp/cloakbrowser-venv/bin/python -m cloakbrowser install && \
       CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname) && \
       echo "CloakBrowser dir: ${CLOAK_DIR}" && \
       cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
       chmod 755 /usr/local/lib/cloakbrowser/chrome && \
       ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser && \
-      rm -rf /var/lib/apt/lists/* ; \
+      rm -rf /tmp/cloakbrowser-venv /var/lib/apt/lists/* ; \
     else \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
     fi
