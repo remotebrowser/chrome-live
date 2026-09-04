@@ -93,8 +93,6 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # image; the chromium s6 service picks which one to launch at runtime (default:
 # google-chrome-stable). CloakBrowser publishes no arm64 binary, so it stays
 # amd64-only; the TARGETARCH guard below keeps that step a no-op on arm64.
-# A venv, not --break-system-packages: pip cannot replace Ubuntu's
-# apt-installed typing-extensions (no RECORD file).
 ARG CLOAKBROWSER_PIP_VERSION=0.5.10
 ARG CLOAKBROWSER_VERSION=146.0.7680.177.5
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
