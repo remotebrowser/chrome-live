@@ -97,7 +97,7 @@ ARG CLOAKBROWSER_PIP_VERSION=0.5.10
 ARG CLOAKBROWSER_VERSION=146.0.7680.177.5
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
-        python3-venv libgl1 libgl1-mesa-dri && \
+      python3-venv libgl1 libgl1-mesa-dri && \
       python3 -m venv /tmp/cloakbrowser-venv && \
       /tmp/cloakbrowser-venv/bin/pip install "cloakbrowser==${CLOAKBROWSER_PIP_VERSION}" && \
       /tmp/cloakbrowser-venv/bin/python -m cloakbrowser install && \
