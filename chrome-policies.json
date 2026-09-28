@@ -1,0 +1,13 @@
+{
+  "URLBlocklist": [
+    "file://*",
+    "edgedl.me.gvt1.com",
+    "optimizationguide-pa.googleapis.com",
+    "safebrowsing.googleapis.com",
+    "doubleclick.net",
+    "unagi.amazon.com",
+    "fls-na.amazon.com",
+    "unagi-na.amazon.com",
+    "amazon-adsystem.com"
+  ]
+}
