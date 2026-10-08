@@ -1,6 +1,6 @@
 # browser-trace
 
-Monitors browser tab opens and page navigations via the Chrome DevTools Protocol (CDP) and reports them to [Pydantic Logfire](https://logfire.pydantic.dev/) as telemetry events. Also ships tinyproxy log lines from stdin to Logfire when invoked in `tinyproxy` mode — used by chrome-live to surface upstream residential-proxy 407s and connect failures.
+Monitors browser tab opens and page navigations via the Chrome DevTools Protocol (CDP) and exports them as OpenTelemetry logs over OTLP. It also ships tinyproxy log lines from stdin in `tinyproxy` mode — used by chrome-live to surface upstream residential-proxy 407s and connect failures.
 
 ## Prerequisites
 
@@ -25,25 +25,28 @@ uv sync
 Create a config file (e.g. `.env`) with key=value pairs:
 
 ```
-SERVICE_NAME=browser-trace
-LOGFIRE_TOKEN=your-logfire-write-token
-LOGFIRE_TRACEPARENT=00-abc123...-01
+OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com
+OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer your-token
+OTEL_SERVICE_NAME=browser-trace
+OTEL_LOG_LEVEL=INFO
+OTEL_TRACEPARENT=00-abc123...-01
 CDP_HOST=127.0.0.1
 CDP_PORT=9222
 ```
 
 | Key                     | Description                                                                                                                                                                                                                                                                                                                 | Required |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `SERVICE_NAME`          | Service name reported to Logfire (default: `browser-trace`)                                                                                                                                                                                                                                                                 | No       |
-| `LOGFIRE_TOKEN`         | Logfire write token for sending telemetry                                                                                                                                                                                                                                                                                   | No       |
-| `LOGFIRE_TRACEPARENT`   | W3C traceparent to attach events to a parent trace                                                                                                                                                                                                                                                                          | No       |
-| `LOG_LEVEL`             | Minimum severity gate for both the Fly-logs tee **and** Logfire emission (passed through to `logfire.configure(min_level=...)`). Default `INFO` drops tinyproxy `CONNECT` / `INFO` (mapped to `logfire.debug`) from both sinks; set `DEBUG` to surface them. Accepted: `DEBUG`, `INFO`, `NOTICE`, `WARN`, `ERROR`, `FATAL`. | No       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Base OTLP/HTTP endpoint. Logs are sent to its `/v1/logs` path. Empty disables OTLP export. | No |
+| `OTEL_EXPORTER_OTLP_HEADERS` | Comma-separated OTLP request headers in `key=value` form (for example `authorization=Bearer token`). | No |
+| `OTEL_SERVICE_NAME` | OpenTelemetry `service.name` resource attribute (default: `browser-trace`). | No |
+| `OTEL_LOG_LEVEL` | App-specific minimum severity for stdout and OTLP logs. Default `INFO` drops tinyproxy `CONNECT` / `INFO` noise; set `DEBUG` to include it. Accepted: `DEBUG`, `INFO`, `NOTICE`, `WARN`, `ERROR`, `FATAL`. | No |
+| `OTEL_TRACEPARENT` | Optional W3C traceparent attached to emitted logs. | No |
 | `CDP_HOST`              | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
 | `CDP_PORT`              | Chrome DevTools Protocol port (default: `9222`)                                                                                                                                                                                                                                                                             | No       |
 | `RECORDING_DIR`         | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
 | `EVENT_LOG_PATH`        | JSONL file containing every application log record, served by `GET /logs` (default: `/tmp/browser-trace-logs.jsonl`)                                                                                                                                                                                                         | No       |
 
-The config file is watched for changes every 2 seconds, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
+The config file is watched for changes every 2 seconds, so OTLP settings and the optional traceparent can be updated at runtime without restarting the service.
 
 ## Usage
 
@@ -60,7 +63,7 @@ uv run main.py cdp .env
 3. Emit `tab_opened` events when new tabs are created
 4. Emit `navigation` events (with HTTP status codes) for top-frame document navigations
 5. Emit `tab_traffic` events with per-tab / per-host byte totals (see [Traffic accounting](#traffic-accounting))
-6. Send all events to Logfire if a token is configured
+6. Send all events to the configured OTLP endpoint
 7. Send every application log record to `EVENT_LOG_PATH` as JSONL, retrievable via `GET /logs` (see [Logs](#logs))
 
 ### `tinyproxy` — tinyproxy log shipper
@@ -69,7 +72,7 @@ uv run main.py cdp .env
 tinyproxy -d -c /etc/tinyproxy.conf | uv run main.py tinyproxy .env
 ```
 
-Reads tinyproxy log lines from stdin (one per line), parses the leading log level (`CONNECT`, `ERROR`, `WARNING`, `NOTICE`, `CRITICAL`, `INFO`), tees each line to stdout for container log collectors, and emits to Logfire via the appropriate severity (`logfire.info` / `logfire.warn` / `logfire.error` / `logfire.notice`). Each event carries a `tinyproxy_level` attribute so the level is queryable in Logfire. Configure tinyproxy with `LogFile "/dev/stdout"` so its log writes flow to the pipe.
+Reads tinyproxy log lines from stdin (one per line), parses the leading log level (`CONNECT`, `ERROR`, `WARNING`, `NOTICE`, `CRITICAL`, `INFO`), tees each line to stdout for container log collectors, and exports each event over OTLP at the appropriate severity. Each event carries a `tinyproxy_level` attribute. Configure tinyproxy with `LogFile "/dev/stdout"` so its log writes flow to the pipe.
 
 ### `record` — send a recording to a pre-signed URL
 
@@ -105,7 +108,7 @@ Every application record is appended as one JSON object per line to `EVENT_LOG_P
 Reporting:
 
 - `GET /traffic` on the HTTP server returns live totals: process-wide bytes and request counts, a host ranking, and a per-tab breakdown for open tabs plus the last 50 closed ones. `?hosts=N` caps the host ranking (default 20).
-- A `tab_traffic` event goes to Logfire once a minute per active tab and once more when the tab closes. It carries `bytes_received` (the tab's running total), `bytes_delta` (increase since that tab's previous event, so deltas sum over a session), `requests`, `host_count`, and a `hosts` map of the top 10 hosts by bytes. Tabs that pulled nothing since the last rollup are skipped.
+- A `tab_traffic` event goes over OTLP once a minute per active tab and once more when the tab closes. It carries `bytes_received` (the tab's running total), `bytes_delta` (increase since that tab's previous event, so deltas sum over a session), `requests`, `host_count`, and a `hosts` map of the top 10 hosts by bytes. Tabs that pulled nothing since the last rollup are skipped.
 
 These totals are a floor on the real cost, not the bill. Measured against a byte-counting proxy placed under Chrome, one Wikipedia article in a fresh profile came to 573,305 bytes here against 697,683 on the wire, so 82%. The gap is TLS handshakes and certificate chains (per-connection, so per-host coverage ran from 97% on the main document down to 19% on a host contacted once for 1.5 KB), request/upload bytes and TCP overhead, which CDP does not report at all, and Chrome's own background traffic, which belongs to no tab. Calibrate against the proxy provider's usage API before using these numbers for billing.
 

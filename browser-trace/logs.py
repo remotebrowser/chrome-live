@@ -1,16 +1,44 @@
 """Application logging fan-out and JSONL history for ``GET /logs``."""
 
+import atexit
 import json
 import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import logfire
+from opentelemetry import context
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 _DEFAULT_PATH = Path("/tmp/browser-trace-logs.jsonl")
 _HANDLER_MARKER = "browser_trace_handler"
 _path = _DEFAULT_PATH
+_otel_provider: LoggerProvider | None = None
+
+
+def shutdown() -> None:
+    """Flush and close the active OTLP provider at process exit."""
+    global _otel_provider
+    if _otel_provider is not None:
+        _otel_provider.shutdown()
+        _otel_provider = None
+
+
+atexit.register(shutdown)
+
+
+def attach_traceparent(traceparent: str):
+    """Attach a W3C traceparent to the current OpenTelemetry context."""
+    extracted = TraceContextTextMapPropagator().extract({"traceparent": traceparent})
+    return context.attach(extracted)
+
+
+def detach_context(token) -> None:
+    context.detach(token)
 
 
 class _JsonFormatter(logging.Formatter):
@@ -61,11 +89,14 @@ def configure(
     logger: logging.Logger,
     *,
     path: Path | None,
-    logfire_level: int,
+    otel_endpoint: str,
+    otel_headers: str,
+    service_name: str,
+    otel_log_level: int,
     stdout_level: int,
 ) -> None:
-    """Send every application record to JSONL, stdout, and Logfire."""
-    global _path
+    """Send application records to JSONL, stdout, and an optional OTLP endpoint."""
+    global _path, _otel_provider
     _path = path or _DEFAULT_PATH
     for handler in list(logger.handlers):
         if getattr(handler, _HANDLER_MARKER, False):
@@ -88,9 +119,26 @@ def configure(
     setattr(stdout_handler, _HANDLER_MARKER, True)
     logger.addHandler(stdout_handler)
 
-    logfire_handler = logfire.LogfireLoggingHandler(
-        level=logfire_level,
-        fallback=logging.NullHandler(),
-    )
-    setattr(logfire_handler, _HANDLER_MARKER, True)
-    logger.addHandler(logfire_handler)
+    if _otel_provider is not None:
+        shutdown()
+
+    if otel_endpoint:
+        endpoint = otel_endpoint.rstrip("/")
+        if not endpoint.endswith("/v1/logs"):
+            endpoint += "/v1/logs"
+        headers = {
+            key.strip(): value.strip()
+            for item in otel_headers.split(",")
+            if "=" in item
+            for key, value in [item.split("=", 1)]
+        }
+        exporter = OTLPLogExporter(endpoint=endpoint, headers=headers or None)
+        _otel_provider = LoggerProvider(
+            resource=Resource.create({SERVICE_NAME: service_name})
+        )
+        _otel_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
+        otel_handler = LoggingHandler(
+            level=otel_log_level, logger_provider=_otel_provider
+        )
+        setattr(otel_handler, _HANDLER_MARKER, True)
+        logger.addHandler(otel_handler)
