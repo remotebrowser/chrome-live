@@ -181,12 +181,6 @@ def emit_cdp_event(
         else logging.INFO
     )
     msg = f"{_log_prefix} {event}"
-    if tab_url:
-        msg += f": {tab_url}"
-    if status_code:
-        msg += f": {status_code}"
-    if error_text:
-        msg += f": {error_text}"
     _emit_with_traceparent(level, msg, {"event": event, **attrs})
 
 
@@ -819,13 +813,22 @@ def classify_tinyproxy_line(line: str) -> tuple[str, str, str]:
     return body, level, method_name
 
 
+_TINYPROXY_FILTERED_DOMAIN_RE = re.compile(
+    r'^NOTICE Proxying refused on filtered domain "([^"]+)"$'
+)
+
+
 def emit_tinyproxy_event(body: str, level: str, method_name: str) -> None:
     attrs = {
         "tinyproxy_level": level or "UNKNOWN",
         "event_timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    message_body = body
+    if m := _TINYPROXY_FILTERED_DOMAIN_RE.match(body):
+        attrs["filtered_domain"] = m.group(1)
+        message_body = "NOTICE Proxying refused on filtered domain"
     _emit_with_traceparent(
-        _logging_level(method_name), f"{_log_prefix} {body}", attrs
+        _logging_level(method_name), f"{_log_prefix} {message_body}", attrs
     )
 
 
