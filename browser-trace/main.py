@@ -180,7 +180,6 @@ def emit_cdp_event(
         or (status_code is not None and status_code >= 400)
         else logging.INFO
     )
-    # Keep the message constant per event type - tab_url etc. already live in attrs.
     msg = f"{_log_prefix} {event}"
     _emit_with_traceparent(level, msg, {"event": event, **attrs})
 
@@ -814,7 +813,6 @@ def classify_tinyproxy_line(line: str) -> tuple[str, str, str]:
     return body, level, method_name
 
 
-# Highest-volume tinyproxy line; genericize it so Logfire groups by event, not per domain.
 _TINYPROXY_FILTERED_DOMAIN_RE = re.compile(
     r'^NOTICE Proxying refused on filtered domain "([^"]+)"$'
 )
