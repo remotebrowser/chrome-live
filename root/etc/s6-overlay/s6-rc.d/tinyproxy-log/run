@@ -4,12 +4,11 @@
 # Idempotent and atomic: if the sibling `browser-trace` service has already
 # substituted, the patterns no longer match and this is a no-op.
 sed -i \
-  -e "s|\${SERVICE_NAME}|${SERVICE_NAME:-browser-trace}|g" \
-  -e "s|\${ENVIRONMENT}|${ENVIRONMENT:-local}|g" \
-  -e "s|\${LOGFIRE_TOKEN}|${LOGFIRE_TOKEN:-}|g" \
-  -e "s|\${LOGFIRE_TRACEPARENT}|${LOGFIRE_TRACEPARENT:-}|g" \
-  -e "s|\${LOG_LEVEL}|${LOG_LEVEL:-INFO}|g" \
+  -e "s|\${OTEL_EXPORTER_OTLP_ENDPOINT}|${OTEL_EXPORTER_OTLP_ENDPOINT:-}|g" \
+  -e "s|\${OTEL_EXPORTER_OTLP_HEADERS}|${OTEL_EXPORTER_OTLP_HEADERS:-}|g" \
+  -e "s|\${OTEL_SERVICE_NAME}|${OTEL_SERVICE_NAME:-podman-fleet}|g" \
+  -e "s|\${OTEL_LOG_LEVEL}|${OTEL_LOG_LEVEL:-INFO}|g" \
+  -e "s|\${OTEL_TRACEPARENT}|${OTEL_TRACEPARENT:-}|g" \
   /app/browser-trace.conf
 
-export LOGFIRE_INSPECT_ARGUMENTS=false
 exec /usr/local/bin/browser-trace tinyproxy /app/browser-trace.conf

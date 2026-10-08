@@ -2,11 +2,11 @@
 
 # Substitute environment variables into config
 sed -i \
-  -e "s|\${SERVICE_NAME}|${SERVICE_NAME:-browser-trace}|g" \
-  -e "s|\${ENVIRONMENT}|${ENVIRONMENT:-local}|g" \
-  -e "s|\${LOGFIRE_TOKEN}|${LOGFIRE_TOKEN:-}|g" \
-  -e "s|\${LOGFIRE_TRACEPARENT}|${LOGFIRE_TRACEPARENT:-}|g" \
-  -e "s|\${LOG_LEVEL}|${LOG_LEVEL:-INFO}|g" \
+  -e "s|\${OTEL_EXPORTER_OTLP_ENDPOINT}|${OTEL_EXPORTER_OTLP_ENDPOINT:-}|g" \
+  -e "s|\${OTEL_EXPORTER_OTLP_HEADERS}|${OTEL_EXPORTER_OTLP_HEADERS:-}|g" \
+  -e "s|\${OTEL_SERVICE_NAME}|${OTEL_SERVICE_NAME:-podman-fleet}|g" \
+  -e "s|\${OTEL_LOG_LEVEL}|${OTEL_LOG_LEVEL:-INFO}|g" \
+  -e "s|\${OTEL_TRACEPARENT}|${OTEL_TRACEPARENT:-}|g" \
   /app/browser-trace.conf
 
 # Wait for Chrome CDP
@@ -14,5 +14,4 @@ while ! socat -T1 -u OPEN:/dev/null TCP:127.0.0.1:9221 >/dev/null 2>&1; do
   sleep 1
 done
 
-export LOGFIRE_INSPECT_ARGUMENTS=false
 exec /usr/local/bin/browser-trace /app/browser-trace.conf
