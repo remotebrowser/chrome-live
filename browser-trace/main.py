@@ -31,7 +31,7 @@ import upload as uploader
 
 @dataclass
 class Config:
-    service_name: str = "podman-fleet"
+    service_name: str = "browser-trace"
     otel_endpoint: str = ""
     otel_headers: str = ""
     cdp_host: str = "127.0.0.1"
@@ -62,7 +62,7 @@ class Config:
             pass
         tp = values.get("OTEL_TRACEPARENT", "")
         return cls(
-            service_name=values.get("OTEL_SERVICE_NAME", "podman-fleet"),
+            service_name=values.get("OTEL_SERVICE_NAME", "browser-trace"),
             otel_endpoint=values.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
             otel_headers=values.get("OTEL_EXPORTER_OTLP_HEADERS", ""),
             cdp_host=values.get("CDP_HOST", "127.0.0.1"),

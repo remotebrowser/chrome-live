@@ -27,7 +27,7 @@ Create a config file (e.g. `.env`) with key=value pairs:
 ```
 OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example.com
 OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer your-token
-OTEL_SERVICE_NAME=podman-fleet
+OTEL_SERVICE_NAME=browser-trace
 OTEL_LOG_LEVEL=INFO
 OTEL_TRACEPARENT=00-abc123...-01
 CDP_HOST=127.0.0.1
@@ -38,7 +38,7 @@ CDP_PORT=9222
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Base OTLP/HTTP endpoint. Logs are sent to its `/v1/logs` path. Empty disables OTLP export. | No |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Comma-separated OTLP request headers in `key=value` form (for example `authorization=Bearer token`). | No |
-| `OTEL_SERVICE_NAME` | OpenTelemetry `service.name` resource attribute (default: `podman-fleet`). | No |
+| `OTEL_SERVICE_NAME` | OpenTelemetry `service.name` resource attribute (default: `browser-trace`). | No |
 | `OTEL_LOG_LEVEL` | App-specific minimum severity for stdout and OTLP logs. Default `INFO` drops tinyproxy `CONNECT` / `INFO` noise; set `DEBUG` to include it. Accepted: `DEBUG`, `INFO`, `NOTICE`, `WARN`, `ERROR`, `FATAL`. | No |
 | `OTEL_TRACEPARENT` | Optional W3C traceparent attached to emitted logs. | No |
 | `CDP_HOST`              | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
