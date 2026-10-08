@@ -4,7 +4,7 @@
 sed -i \
   -e "s|\${OTEL_EXPORTER_OTLP_ENDPOINT}|${OTEL_EXPORTER_OTLP_ENDPOINT:-}|g" \
   -e "s|\${OTEL_EXPORTER_OTLP_HEADERS}|${OTEL_EXPORTER_OTLP_HEADERS:-}|g" \
-  -e "s|\${OTEL_SERVICE_NAME}|${OTEL_SERVICE_NAME:-podman-fleet}|g" \
+  -e "s|\${OTEL_SERVICE_NAME}|${OTEL_SERVICE_NAME:-chrome-live}|g" \
   -e "s|\${OTEL_LOG_LEVEL}|${OTEL_LOG_LEVEL:-INFO}|g" \
   -e "s|\${OTEL_TRACEPARENT}|${OTEL_TRACEPARENT:-}|g" \
   /app/browser-trace.conf
