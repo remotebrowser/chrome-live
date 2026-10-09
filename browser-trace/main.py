@@ -268,9 +268,6 @@ def emit_navigation(session: dict, url: str, status_code: int) -> None:
         status_code=status_code,
         event_timestamp=datetime.now(timezone.utc).isoformat(),
     )
-    _logger.info(
-        f"{_log_prefix} navigation: tab={session.get('target_id', '')[:8]} status={status_code} url={url}"
-    )
 
 
 def emit_captcha_detected(session: dict, url: str, kind: str) -> None:
@@ -280,9 +277,6 @@ def emit_captcha_detected(session: dict, url: str, kind: str) -> None:
         tab_url=url,
         captcha_kind=kind,
         event_timestamp=datetime.now(timezone.utc).isoformat(),
-    )
-    _logger.info(
-        f"{_log_prefix} captcha_detected: tab={session.get('target_id', '')[:8]} kind={kind} url={url}"
     )
 
 
@@ -360,15 +354,6 @@ def emit_tab_traffic(tab: traffic.TabTraffic, final: bool) -> None:
             "hosts": {host: byte_count for host, byte_count in hosts},
             "final": final,
         },
-    )
-    top = ", ".join(
-        f"{host}={traffic.human_bytes(byte_count)}" for host, byte_count in hosts[:3]
-    )
-    _logger.info(
-        f"{_log_prefix} tab_traffic: tab={tab.target_id[:8]} "
-        f"total={traffic.human_bytes(tab.bytes_received)} "
-        f"delta={traffic.human_bytes(delta)} requests={tab.requests} "
-        f"final={final} top=[{top}] url={tab.url}"
     )
 
 
@@ -448,9 +433,6 @@ async def handle_event(conn: cdp.Connection, event: dict) -> None:
                 tab_id=target_info.get("targetId", ""),
                 tab_url=target_info.get("url", ""),
                 event_timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-            _logger.info(
-                f"{_log_prefix} tab_opened: id={target_info.get('targetId', '')[:8]} url={target_info.get('url', '')}"
             )
 
     elif method == "Target.attachedToTarget":
