@@ -13,10 +13,19 @@ _HANDLER_MARKER = "browser_trace_handler"
 _path = _DEFAULT_PATH
 
 
+_RESERVED = frozenset(logging.makeLogRecord({}).__dict__) | {"message", "asctime"}
+
+
+def _extra_fields(record: logging.LogRecord, *, exclude: frozenset[str] = frozenset()) -> dict:
+    return {
+        key: value
+        for key, value in record.__dict__.items()
+        if key not in _RESERVED and key not in exclude and not key.startswith("_")
+    }
+
+
 class _JsonFormatter(logging.Formatter):
     """Serialize application log records without logging's internal fields."""
-
-    _reserved = frozenset(logging.makeLogRecord({}).__dict__) | {"message", "asctime"}
 
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -24,14 +33,19 @@ class _JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "message": record.getMessage(),
         }
-        payload.update(
-            {
-                key: value
-                for key, value in record.__dict__.items()
-                if key not in self._reserved and not key.startswith("_")
-            }
-        )
+        payload.update(_extra_fields(record))
         return json.dumps(payload, default=str)
+
+
+class _TextFormatter(logging.Formatter):
+    """Render extra fields inline so a generic message (kept short for Logfire's
+    span_name cardinality) still reads as a full line on stdout/Fly logs."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        extras = _extra_fields(record, exclude=frozenset({"event"}))
+        suffix = " ".join(f"{key}={value}" for key, value in extras.items())
+        message = record.getMessage()
+        return f"{message} {suffix}" if suffix else message
 
 
 def get_path() -> Path:
@@ -84,7 +98,7 @@ def configure(
 
     stdout_handler = logging.StreamHandler(sys.stdout)
     stdout_handler.setLevel(stdout_level)
-    stdout_handler.setFormatter(logging.Formatter("%(message)s"))
+    stdout_handler.setFormatter(_TextFormatter())
     setattr(stdout_handler, _HANDLER_MARKER, True)
     logger.addHandler(stdout_handler)
 
