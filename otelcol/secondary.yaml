@@ -1,0 +1,24 @@
+# Dual-write overlay, merged on top of config.yaml when OTEL_SECONDARY_ENDPOINT
+# is set. Maps merge deeply but lists replace, so each pipeline's `exporters`
+# below is the full list. The secondary exporter has its own queue and retry
+# state, so an outage there does not hold back the Logfire exporter.
+
+exporters:
+  otlp_http/secondary:
+    endpoint: ${env:OTEL_SECONDARY_ENDPOINT}
+    headers:
+      Authorization: "${env:OTEL_SECONDARY_AUTHORIZATION}"
+    compression: gzip
+    sending_queue:
+      storage: file_storage/queue
+    retry_on_failure:
+      max_elapsed_time: 10m
+
+service:
+  pipelines:
+    traces:
+      exporters: [otlp_http/logfire, otlp_http/secondary]
+    logs:
+      exporters: [otlp_http/logfire, otlp_http/secondary]
+    metrics:
+      exporters: [otlp_http/logfire, otlp_http/secondary]

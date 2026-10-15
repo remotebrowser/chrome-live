@@ -43,7 +43,31 @@ CDP_PORT=9222
 | `RECORDING_DIR`         | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
 | `EVENT_LOG_PATH`        | JSONL file containing every application log record, served by `GET /logs` (default: `/tmp/browser-trace-logs.jsonl`)                                                                                                                                                                                                         | No       |
 
-The config file is watched for changes every 2 seconds, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
+The config file is watched for changes every second, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
+
+## OpenTelemetry Collector (optional)
+
+The container image ships an `otelcol-contrib` sidecar (s6 service `otelcol`, config in [`otelcol/`](../otelcol)). It is off by default. With it off, browser-trace exports straight to Logfire as described above.
+
+```
+browser-trace (cdp)      ─┐ OTLP/HTTP 127.0.0.1:4318
+browser-trace tinyproxy  ─┴──────────────► otelcol ─┬─► Logfire           (disk-backed queue + retry)
+                                                    └─► secondary backend (optional dual write)
+```
+
+With `OTEL_COLLECTOR_ENABLED=true`, the s6 run scripts export `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`. The Logfire SDK then exports to the collector, and `main.py` turns off the SDK's direct Logfire export, so each record is sent only once. Records that pass through the collector carry the resource attribute `telemetry.pipeline=otelcol`.
+
+These container env vars configure the collector. They are read by the `otelcol` s6 service, not by the config file:
+
+| Env var                        | Description                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `OTEL_COLLECTOR_ENABLED`       | `true` routes telemetry through the collector. Default `false`.                                               |
+| `LOGFIRE_TOKEN`                | Logfire write token, which the collector also uses.                                                           |
+| `LOGFIRE_BASE_URL`             | Logfire ingest URL. It must match the project region. Default `https://logfire-us.pydantic.dev` (EU: `https://logfire-eu.pydantic.dev`). |
+| `OTEL_SECONDARY_ENDPOINT`      | Base URL of a second OTLP/HTTP backend. Setting it turns on dual write (merges `otelcol/secondary.yaml`).     |
+| `OTEL_SECONDARY_AUTHORIZATION` | Value of the `Authorization` header sent to the secondary backend.                                            |
+
+Each exporter has its own disk-backed queue (`/var/lib/otelcol/queue`) and retry state, so an outage on one backend doesn't stop delivery to the other. Logfire spans that are still in progress don't appear while routed through the collector. That doesn't matter here, because browser-trace only emits log records.
 
 ## Usage
 

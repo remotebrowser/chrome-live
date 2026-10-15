@@ -1,0 +1,70 @@
+# OpenTelemetry Collector sidecar for browser-trace.
+#
+# Both browser-trace processes (cdp + tinyproxy) export OTLP/HTTP to
+# 127.0.0.1:4318 when OTEL_COLLECTOR_ENABLED=true; this collector owns the
+# hop to Logfire (batching, retries, on-disk queue). Dual write is layered on
+# by merging `secondary.yaml` — see the otelcol s6 run script.
+#
+# Do not add processors that rewrite `logfire.*` attributes
+# (logfire.msg_template, logfire.span_type, …) — the Logfire UI relies on them.
+
+receivers:
+  otlp:
+    protocols:
+      # HTTP only: the Logfire Python SDK only speaks OTLP/HTTP. Bound to
+      # localhost so nothing outside the container can push into the pipeline.
+      http:
+        endpoint: 127.0.0.1:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 400
+    spike_limit_mib: 100
+  resource:
+    attributes:
+      # Lets Logfire queries tell collector-routed data from direct SDK export.
+      - key: telemetry.pipeline
+        value: otelcol
+        action: upsert
+  batch: {}
+
+exporters:
+  otlp_http/logfire:
+    # Must match the Logfire project's region (logfire-us / logfire-eu).
+    endpoint: ${env:LOGFIRE_BASE_URL}
+    headers:
+      Authorization: "Bearer ${env:LOGFIRE_TOKEN}"
+    compression: gzip
+    sending_queue:
+      storage: file_storage/queue
+    retry_on_failure:
+      max_elapsed_time: 10m
+
+extensions:
+  health_check:
+    endpoint: 127.0.0.1:13133
+  file_storage/queue:
+    directory: /var/lib/otelcol/queue
+    create_directory: true
+
+service:
+  extensions: [health_check, file_storage/queue]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      level: none
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_http/logfire]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_http/logfire]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp_http/logfire]

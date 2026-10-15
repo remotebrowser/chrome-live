@@ -184,6 +184,11 @@ RUN curl -o /tmp/hblock 'https://raw.githubusercontent.com/hectorm/hblock/v3.5.1
 COPY --from=browser-trace-builder /src/dist/browser-trace /usr/local/bin/browser-trace
 RUN chmod +x /usr/local/bin/browser-trace
 
+# OpenTelemetry Collector sidecar (opt-in via OTEL_COLLECTOR_ENABLED=true)
+COPY --from=otel/opentelemetry-collector-contrib:0.161.0 /otelcol-contrib /usr/local/bin/otelcol
+COPY otelcol/ /etc/otelcol/
+RUN mkdir -p /var/lib/otelcol/queue
+
 COPY switch-browser.sh /usr/local/bin/switch-browser
 RUN chmod +x /usr/local/bin/switch-browser
 
