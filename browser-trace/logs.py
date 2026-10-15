@@ -6,11 +6,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import logfire
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import Resource
 
 _DEFAULT_PATH = Path("/tmp/browser-trace-logs.jsonl")
 _HANDLER_MARKER = "browser_trace_handler"
 _path = _DEFAULT_PATH
+_provider: LoggerProvider | None = None
+_provider_key: tuple[str, str, str] | None = None
 
 
 class _JsonFormatter(logging.Formatter):
@@ -57,14 +62,38 @@ def read_all() -> list[dict]:
     return records
 
 
+def _logger_provider(endpoint: str, service_name: str, environment: str) -> LoggerProvider | None:
+    """Reuse the provider until its resource or endpoint changes, flushing the old one."""
+    global _provider, _provider_key
+    key = (endpoint, service_name, environment)
+    if key == _provider_key:
+        return _provider
+    if _provider is not None:
+        _provider.shutdown()
+    _provider = None
+    _provider_key = key
+    if endpoint:
+        resource = Resource.create(
+            {"service.name": service_name, "deployment.environment.name": environment}
+        )
+        _provider = LoggerProvider(resource=resource)
+        _provider.add_log_record_processor(
+            BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{endpoint.rstrip('/')}/v1/logs"))
+        )
+    return _provider
+
+
 def configure(
     logger: logging.Logger,
     *,
     path: Path | None,
-    logfire_level: int,
+    otlp_endpoint: str,
+    service_name: str,
+    environment: str,
+    otlp_level: int,
     stdout_level: int,
 ) -> None:
-    """Send every application record to JSONL, stdout, and Logfire."""
+    """Send every application record to JSONL, stdout, and OTLP."""
     global _path
     _path = path or _DEFAULT_PATH
     for handler in list(logger.handlers):
@@ -88,9 +117,8 @@ def configure(
     setattr(stdout_handler, _HANDLER_MARKER, True)
     logger.addHandler(stdout_handler)
 
-    logfire_handler = logfire.LogfireLoggingHandler(
-        level=logfire_level,
-        fallback=logging.NullHandler(),
-    )
-    setattr(logfire_handler, _HANDLER_MARKER, True)
-    logger.addHandler(logfire_handler)
+    provider = _logger_provider(otlp_endpoint, service_name, environment)
+    if provider is not None:
+        otlp_handler = LoggingHandler(level=otlp_level, logger_provider=provider)
+        setattr(otlp_handler, _HANDLER_MARKER, True)
+        logger.addHandler(otlp_handler)

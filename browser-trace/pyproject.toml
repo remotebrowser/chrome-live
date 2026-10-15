@@ -2,7 +2,7 @@
 name = "browser-trace"
 version = "0.4.0"
 requires-python = ">=3.12"
-dependencies = ["websockets", "logfire", "aiohttp"]
+dependencies = ["websockets", "aiohttp", "opentelemetry-sdk", "opentelemetry-exporter-otlp-proto-http"]
 
 [dependency-groups]
 dev = ["pyinstaller"]
