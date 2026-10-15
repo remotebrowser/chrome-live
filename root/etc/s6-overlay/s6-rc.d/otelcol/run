@@ -1,0 +1,83 @@
+#!/command/with-contenv sh
+set -eu
+
+# Local OTLP sidecar for browser-trace. Every configured backend gets a full
+# copy of each signal (dual-write). A backend is on only when its env vars are
+# set; with none, the nop exporter drops data so senders never see errors.
+config=/tmp/otelcol.yaml
+exporters=""
+
+{
+  cat <<'YAML'
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+  batch: {}
+exporters:
+  nop: {}
+YAML
+
+  if [ -n "${LOGFIRE_TOKEN:-}" ]; then
+    case "$LOGFIRE_TOKEN" in
+      pylf_v1_eu_*) logfire_url=https://logfire-eu.pydantic.dev ;;
+      *) logfire_url=https://logfire-us.pydantic.dev ;;
+    esac
+    cat <<YAML
+  otlp_http/logfire:
+    endpoint: ${logfire_url}
+    headers:
+      Authorization: \${env:LOGFIRE_TOKEN}
+YAML
+    exporters="$exporters, otlp_http/logfire"
+  fi
+
+  # OTLP_DUAL_WRITE_HEADERS uses the OTEL_EXPORTER_OTLP_HEADERS format
+  # (k1=v1,k2=v2). Values go through env refs so secrets stay out of the file.
+  if [ -n "${OTLP_DUAL_WRITE_ENDPOINT:-}" ]; then
+    cat <<'YAML'
+  otlp_http/dual:
+    endpoint: ${env:OTLP_DUAL_WRITE_ENDPOINT}
+YAML
+    if [ -n "${OTLP_DUAL_WRITE_HEADERS:-}" ]; then
+      echo "    headers:"
+      i=0
+      set -f
+      old_ifs=$IFS
+      IFS=,
+      for pair in $OTLP_DUAL_WRITE_HEADERS; do
+        key=$(printf '%s' "${pair%%=*}" | tr -d ' ')
+        export "OTLP_DUAL_WRITE_HEADER_$i=$(printf '%s' "${pair#*=}" | sed 's/%20/ /g')"
+        echo "      ${key}: \${env:OTLP_DUAL_WRITE_HEADER_$i}"
+        i=$((i + 1))
+      done
+      IFS=$old_ifs
+      set +f
+    fi
+    exporters="$exporters, otlp_http/dual"
+  fi
+
+  exporters=${exporters#, }
+  cat <<YAML
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+YAML
+  for signal in traces metrics logs; do
+    echo "    ${signal}:"
+    echo "      receivers: [otlp]"
+    echo "      processors: [memory_limiter, batch]"
+    echo "      exporters: [${exporters:-nop}]"
+  done
+} > "$config"
+
+echo "otelcol exporters: ${exporters:-nop}"
+exec 2>&1
+exec /usr/local/bin/otelcol --config "$config"

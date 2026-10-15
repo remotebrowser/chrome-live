@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Browser trace — monitors tab opens and navigations via CDP, and
-forwards tinyproxy log lines from stdin to Logfire when invoked in
+forwards tinyproxy log lines from stdin over OTLP when invoked in
 `tinyproxy` mode."""
 
 import argparse
@@ -18,8 +18,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import urlopen
 
-import logfire
 import websockets
+from opentelemetry import context as otel_context
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 import cdp
 import logs
@@ -34,14 +35,13 @@ import upload as uploader
 class Config:
     service_name: str = "browser-trace"
     environment: str = "local"
-    logfire_token: str = ""
+    # OTLP/HTTP base URL, normally the local collector. Empty disables export.
+    otlp_endpoint: str = ""
     cdp_host: str = "127.0.0.1"
     cdp_port: int = 9222
     traceparent: str | None = None
-    # Tinyproxy-mode tee threshold. Mirrors `logfire`'s `min_log_level`
-    # console semantics: lines whose mapped Logfire severity is below this
-    # are still sent to Logfire (so the UI sees them) but are not tee'd to
-    # stdout / Fly logs. Hot-reloadable via the config-file watcher.
+    # Minimum severity for both the stdout tee and OTLP export.
+    # Hot-reloadable via the config-file watcher.
     log_level: str = "INFO"
     # Recording
     recording_dir: str = ""  # defaults to /tmp/recordings
@@ -64,11 +64,12 @@ class Config:
                         values[key.strip()] = value.strip().strip('"').strip("'")
         except FileNotFoundError:
             pass
-        tp = values.get("LOGFIRE_TRACEPARENT", "")
+        # LOGFIRE_TRACEPARENT is the older name, still written by existing callers.
+        tp = values.get("TRACEPARENT") or values.get("LOGFIRE_TRACEPARENT", "")
         return cls(
             service_name=values.get("SERVICE_NAME", "browser-trace"),
             environment=values.get("ENVIRONMENT", "local"),
-            logfire_token=values.get("LOGFIRE_TOKEN", ""),
+            otlp_endpoint=values.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
             cdp_host=values.get("CDP_HOST", "127.0.0.1"),
             cdp_port=int(values.get("CDP_PORT", "9222")),
             traceparent=tp if tp else None,
@@ -96,7 +97,7 @@ network_requests: dict[str, dict] = {}
 _config = Config()
 
 # Prefix prepended to every stdout line this process writes (tee output) and
-# to every Logfire message body. Set once in `main()` from `args.cmd` so the
+# to every OTLP log body. Set once in `main()` from `args.cmd` so the
 # subcommand-mode is visible at-a-glance and never gets mixed up — `[cdp-log]`
 # in CDP mode, `[tinyproxy-log]` in tinyproxy mode. The `-log` suffix makes
 # clear these come from the browser-trace shipper, not from chrome's CDP or
@@ -105,7 +106,7 @@ _log_prefix: str = "[browser-trace]"
 _logger = logging.getLogger("browser-trace")
 _NOTICE_LEVEL = 25
 logging.addLevelName(_NOTICE_LEVEL, "NOTICE")
-_logfire_configured = False
+_traceparent_propagator = TraceContextTextMapPropagator()
 
 
 # CAPTCHA vendor classifier, run via Runtime.evaluate on every main-frame
@@ -138,16 +139,20 @@ _probe_tasks: set[asyncio.Task] = set()
 
 # How often open tabs emit a byte-usage rollup. One event per active tab per
 # interval — short enough that a crash loses little, long enough not to bill
-# Logfire for per-request volume.
+# the telemetry backend for per-request volume.
 TRAFFIC_REPORT_INTERVAL = 60.0
 
 
 def _emit_with_traceparent(level: int, msg: str, attrs: dict) -> None:
-    if _config.traceparent:
-        with logfire.attach_context({"traceparent": _config.traceparent}):
-            _logger.log(level, msg, extra=attrs)
-    else:
+    if not _config.traceparent:
         _logger.log(level, msg, extra=attrs)
+        return
+    ctx = _traceparent_propagator.extract({"traceparent": _config.traceparent})
+    token = otel_context.attach(ctx)
+    try:
+        _logger.log(level, msg, extra=attrs)
+    finally:
+        otel_context.detach(token)
 
 
 def emit_cdp_event(
@@ -185,53 +190,31 @@ def emit_cdp_event(
 
 
 def apply_config(new: Config) -> None:
-    """Apply a new config, reconfiguring logfire if needed."""
-    global _config, _logfire_configured
+    """Apply a new config, reconfiguring OTLP export if needed."""
+    global _config
     old = _config
     _config = new
 
-    if (
-        not _logfire_configured
-        or new.logfire_token != old.logfire_token
-        or new.service_name != old.service_name
-        or new.environment != old.environment
-        or new.log_level != old.log_level
-    ):
-        logfire.configure(
-            token=new.logfire_token,
-            environment=new.environment,
-            send_to_logfire=bool(new.logfire_token),
-            service_name=new.service_name,
-            inspect_arguments=False,
-            # We tee directly to stdout via `{_log_prefix} …` prints — prefix is
-            # `[cdp-log]` or `[tinyproxy-log]` depending on the subcommand.
-            # Disabling Logfire's console output prevents every emitted record
-            # from being printed a second time, halving Fly-log volume.
-            console=False,
-            # Unify the tee threshold (Fly logs) and the Logfire emission
-            # threshold under a single LOG_LEVEL knob. At `LOG_LEVEL=INFO`
-            # (default) the tinyproxy `CONNECT` / `INFO` lines — mapped to
-            # `logfire.debug` — are dropped before being sent to Logfire, so
-            # the UI isn't billed for per-subresource noise. Set
-            # `LOG_LEVEL=DEBUG` in the config file to surface them.
-            min_level=_logfire_min_level(new.log_level),
-        )
-        _logfire_configured = True
-
     event_log_path = Path(new.event_log_path).resolve() if new.event_log_path else None
+    # At the default `LOG_LEVEL=INFO` the tinyproxy `CONNECT` / `INFO` lines
+    # (mapped to debug) are dropped before export, so the backend isn't billed
+    # for per-subresource noise. They stay in the JSONL history.
     logs.configure(
         _logger,
         path=event_log_path,
-        logfire_level=_logging_level(new.log_level),
+        otlp_endpoint=new.otlp_endpoint,
+        service_name=new.service_name,
+        environment=new.environment,
+        otlp_level=_logging_level(new.log_level),
         stdout_level=_logging_level(new.log_level),
     )
 
-    if new.logfire_token:
+    if new.otlp_endpoint:
         _logger.info(
-            f"{_log_prefix} Logfire configured: service={new.service_name} environment={new.environment}"
+            f"{_log_prefix} OTLP export configured: endpoint={new.otlp_endpoint} service={new.service_name} environment={new.environment}"
         )
     else:
-        _logger.info(f"{_log_prefix} Logfire token not configured")
+        _logger.info(f"{_log_prefix} OTLP endpoint not configured")
 
     if new.traceparent != old.traceparent:
         if new.traceparent:
@@ -720,35 +703,17 @@ async def run(config_path: str) -> None:
 #   ERROR     May 12 20:25:38 [123]: HTTP 407 from upstream
 # The first whitespace-delimited token is the level. Anything we don't
 # recognize falls back to `info`.
-TINYPROXY_LEVEL_TO_LOGFIRE_METHOD: dict[str, str] = {
+TINYPROXY_LEVEL_TO_SEVERITY: dict[str, str] = {
     "CRITICAL": "error",
     "ERROR": "error",
     "WARNING": "warn",
     "NOTICE": "notice",
     # CONNECT + INFO are per-request volume noise (every HTTPS subresource emits
     # 2–3 lines). They are retained in `/logs`, but filtered from Fly logs and
-    # Logfire unless `LOG_LEVEL=DEBUG`.
+    # OTLP export unless `LOG_LEVEL=DEBUG`.
     "CONNECT": "debug",
     "INFO": "debug",
 }
-
-# Map our LOG_LEVEL value to the lowercase `LevelName` strings that
-# `logfire.configure(min_level=...)` accepts. Unknown values default to `info`.
-_LOG_LEVEL_TO_LOGFIRE_NAME: dict[str, str] = {
-    "DEBUG": "debug",
-    "INFO": "info",
-    "NOTICE": "notice",
-    "WARN": "warn",
-    "WARNING": "warn",
-    "ERROR": "error",
-    "FATAL": "fatal",
-    "CRITICAL": "fatal",
-}
-
-
-def _logfire_min_level(log_level: str) -> str:
-    return _LOG_LEVEL_TO_LOGFIRE_NAME.get(log_level.upper(), "info")
-
 
 _LOG_LEVEL_TO_PYTHON_LEVEL: dict[str, int] = {
     "DEBUG": logging.DEBUG,
@@ -775,7 +740,7 @@ def parse_tinyproxy_level(line: str) -> str:
 
 # Tinyproxy emits lines like:
 #   ERROR     May 12 22:46:31.766 [609]: read_request_line: Client closed socket
-# Strip the date + pid prefix — Logfire stores its own start_timestamp and Fly
+# Strip the date + pid prefix — OTLP records carry their own timestamp and Fly
 # logs prepend a timestamp too. Result: `ERROR read_request_line: Client closed
 # socket`. The level stays in the body for grep convenience; the structured
 # value is also in the `tinyproxy_level` attribute.
@@ -793,7 +758,7 @@ def strip_tinyproxy_timestamp(line: str) -> str:
 
 # Tinyproxy emits some lines at ERROR severity that are operationally noise
 # (Chrome opens speculative TCP connections it never writes a request on, etc.).
-# These get demoted to `logfire.debug` so they don't show at LOG_LEVEL=INFO but
+# These get demoted to debug so they don't show at LOG_LEVEL=INFO but
 # remain available at DEBUG for triage.
 _TINYPROXY_NOISE_PATTERNS: tuple[str, ...] = (
     "read_request_line: Client",
@@ -807,7 +772,7 @@ def _is_tinyproxy_noise(body: str) -> bool:
 def classify_tinyproxy_line(line: str) -> tuple[str, str, str]:
     body = strip_tinyproxy_timestamp(line)
     level = parse_tinyproxy_level(body)
-    method_name = TINYPROXY_LEVEL_TO_LOGFIRE_METHOD.get(level, "info")
+    method_name = TINYPROXY_LEVEL_TO_SEVERITY.get(level, "info")
     if _is_tinyproxy_noise(body):
         method_name = "debug"
     return body, level, method_name
@@ -902,13 +867,13 @@ def main() -> None:
 
     p_cdp = subparsers.add_parser(
         "cdp",
-        help="Watch browser tabs via CDP and emit navigation events to Logfire",
+        help="Watch browser tabs via CDP and emit navigation events over OTLP",
     )
     p_cdp.add_argument("config", help="Path to the config file")
 
     p_tp = subparsers.add_parser(
         "tinyproxy",
-        help="Read tinyproxy log lines from stdin and forward them to Logfire",
+        help="Read tinyproxy log lines from stdin and forward them over OTLP",
     )
     p_tp.add_argument("config", help="Path to the config file")
 
@@ -920,12 +885,12 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Before apply_config: uploading needs no Logfire, no CDP and no HTTP server, and the
+    # Before apply_config: uploading needs no OTLP export, no CDP and no HTTP server, and the
     # caller reads any stderr output as a failed exec — so this path stays quiet and short.
     if args.cmd == "record":
         sys.exit(run_record(args))
 
-    # Pin the stdout / Logfire-message prefix to the actual subcommand so the
+    # Pin the stdout / OTLP-message prefix to the actual subcommand so the
     # CDP and tinyproxy modes never get mixed up.
     global _log_prefix
     _log_prefix = f"[{args.cmd}-log]"

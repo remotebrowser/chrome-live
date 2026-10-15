@@ -52,6 +52,29 @@ FLY_IP=$(fly ips list -a test-chrome-live --json | jq -r '.[] | select(.Type=="v
 curl http://$FLY_IP:9222/json/list
 ```
 
+## Telemetry (OpenTelemetry collector sidecar)
+
+`browser-trace` sends its logs over OTLP to a local [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
+(`otelcol`, an s6 service listening on `127.0.0.1:4318`). The collector sends a full copy of
+every signal to each backend that is configured (dual-write):
+
+| Env var                    | Backend                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| `LOGFIRE_TOKEN`            | Pydantic Logfire (region picked from the token)                                |
+| `OTLP_DUAL_WRITE_ENDPOINT` | Any OTLP/HTTP backend, e.g. `https://otlp.example.com`                         |
+| `OTLP_DUAL_WRITE_HEADERS`  | Headers for that backend, `k1=v1,k2=v2` (`%20` is decoded to a space)          |
+
+With neither set, the collector drops the data. Backends are read at container start; restart
+to change them.
+
+```
+docker run -p 7000:80 \
+  -e LOGFIRE_TOKEN=pylf_v1_us_... \
+  -e OTLP_DUAL_WRITE_ENDPOINT=https://otlp-gateway.example.com/otlp \
+  -e OTLP_DUAL_WRITE_HEADERS="Authorization=Basic%20xxxx" \
+  chrome-live
+```
+
 ## Stealth browser (CloakBrowser / custom-chromium)
 
 The image ships [CloakBrowser](https://pypi.org/project/cloakbrowser/) — a stealth
