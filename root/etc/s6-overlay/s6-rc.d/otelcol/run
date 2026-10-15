@@ -1,13 +1,22 @@
 #!/command/with-contenv sh
 
-# OpenTelemetry Collector sidecar (see /etc/otelcol/config.yaml). Opt-in: when
-# disabled we idle instead of exiting so browser-trace / tinyproxy-log can
-# keep a static dependency on this service.
-if [ "${OTEL_COLLECTOR_ENABLED:-false}" != "true" ]; then
+# OpenTelemetry Collector sidecar (see /etc/otelcol/config.yaml) that forwards
+# browser-trace telemetry to Logfire. Without a token there is nothing to
+# send, so idle instead of exiting: browser-trace / tinyproxy-log keep a
+# static dependency on this service.
+if [ -z "${LOGFIRE_TOKEN:-}" ]; then
   exec sleep infinity
 fi
 
-export LOGFIRE_BASE_URL="${LOGFIRE_BASE_URL:-https://logfire-us.pydantic.dev}"
+# Pick the ingest region from the token prefix like the Logfire SDK does
+# (pylf_v1_eu_… → EU); LOGFIRE_BASE_URL overrides it.
+if [ -z "${LOGFIRE_BASE_URL:-}" ]; then
+  case "$LOGFIRE_TOKEN" in
+    pylf_v*_eu_*) LOGFIRE_BASE_URL=https://logfire-eu.pydantic.dev ;;
+    *) LOGFIRE_BASE_URL=https://logfire-us.pydantic.dev ;;
+  esac
+fi
+export LOGFIRE_BASE_URL
 export GOMEMLIMIT="${GOMEMLIMIT:-320MiB}"
 
 exec /usr/local/bin/otelcol --config=/etc/otelcol/config.yaml

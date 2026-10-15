@@ -45,26 +45,25 @@ CDP_PORT=9222
 
 The config file is watched for changes every second, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
 
-## OpenTelemetry Collector (optional)
+## OpenTelemetry Collector
 
-The container image ships an `otelcol-contrib` sidecar (s6 service `otelcol`, config in [`otelcol/`](../otelcol)). It is off by default. With it off, browser-trace exports straight to Logfire as described above.
+In the container image, browser-trace doesn't send to Logfire directly. It goes through an `otelcol-contrib` sidecar (s6 service `otelcol`, config in [`otelcol/`](../otelcol)):
 
 ```
 browser-trace (cdp)      ─┐ OTLP/HTTP 127.0.0.1:4318
 browser-trace tinyproxy  ─┴──────────────► otelcol ──► Logfire (disk-backed queue + retry)
 ```
 
-With `OTEL_COLLECTOR_ENABLED=true`, the s6 run scripts export `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`. The Logfire SDK then exports to the collector, and `main.py` turns off the SDK's direct Logfire export, so each record is sent only once. Records that pass through the collector carry the resource attribute `telemetry.pipeline=otelcol`.
+When `LOGFIRE_TOKEN` is set, the s6 run scripts export `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`. The Logfire SDK then exports to the collector, and `main.py` turns off the SDK's direct Logfire export, so each record is sent only once. Records carry the resource attribute `telemetry.pipeline=otelcol`. Without a token, the collector stays idle and nothing is sent, same as before.
 
-These container env vars configure the collector. They are read by the `otelcol` s6 service, not by the config file:
+The collector reads these container env vars through the `otelcol` s6 service, not the config file:
 
-| Env var                        | Description                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `OTEL_COLLECTOR_ENABLED`       | `true` routes telemetry through the collector. Default `false`.                                               |
-| `LOGFIRE_TOKEN`                | Logfire write token, which the collector also uses.                                                           |
-| `LOGFIRE_BASE_URL`             | Logfire ingest URL. It must match the project region. Default `https://logfire-us.pydantic.dev` (EU: `https://logfire-eu.pydantic.dev`). |
+| Env var            | Description                                                                                                           |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `LOGFIRE_TOKEN`    | Logfire write token. Setting it turns on the collector and export.                                                     |
+| `LOGFIRE_BASE_URL` | Logfire ingest URL override. Default: picked from the token's region prefix (`…_eu_…` → `https://logfire-eu.pydantic.dev`, otherwise `https://logfire-us.pydantic.dev`). |
 
-If Logfire is unreachable, the collector keeps data in a disk-backed queue (`/var/lib/otelcol/queue`) and retries for up to 10 minutes. Logfire spans that are still in progress don't appear while routed through the collector. That doesn't matter here, because browser-trace only emits log records.
+If Logfire is unreachable, the collector keeps data in a disk-backed queue (`/var/lib/otelcol/queue`) and retries for up to 10 minutes. Logfire spans that are still in progress don't appear while routed through the collector. That doesn't matter here, because browser-trace only emits log records. Running browser-trace outside the image (e.g. `uv run main.py`) still exports to Logfire directly.
 
 ## Usage
 
