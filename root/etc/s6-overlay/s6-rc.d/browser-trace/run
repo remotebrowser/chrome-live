@@ -15,4 +15,9 @@ while ! socat -T1 -u OPEN:/dev/null TCP:127.0.0.1:9221 >/dev/null 2>&1; do
 done
 
 export LOGFIRE_INSPECT_ARGUMENTS=false
+# Route telemetry through the local otelcol sidecar; main.py then turns off
+# the SDK's direct Logfire export so every record is sent exactly once.
+if [ -n "${LOGFIRE_TOKEN:-}" ]; then
+  export OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+fi
 exec /usr/local/bin/browser-trace /app/browser-trace.conf

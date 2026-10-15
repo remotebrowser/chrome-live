@@ -197,10 +197,14 @@ def apply_config(new: Config) -> None:
         or new.environment != old.environment
         or new.log_level != old.log_level
     ):
+        # With OTEL_EXPORTER_OTLP_ENDPOINT set (the otelcol sidecar), the SDK
+        # adds an OTLP exporter on its own; the collector forwards to Logfire,
+        # so skip the direct export to avoid sending every record twice.
+        via_collector = bool(os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"))
         logfire.configure(
             token=new.logfire_token,
             environment=new.environment,
-            send_to_logfire=bool(new.logfire_token),
+            send_to_logfire=bool(new.logfire_token) and not via_collector,
             service_name=new.service_name,
             inspect_arguments=False,
             # We tee directly to stdout via `{_log_prefix} …` prints — prefix is
