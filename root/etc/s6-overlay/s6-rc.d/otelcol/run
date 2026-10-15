@@ -10,10 +10,4 @@ fi
 export LOGFIRE_BASE_URL="${LOGFIRE_BASE_URL:-https://logfire-us.pydantic.dev}"
 export GOMEMLIMIT="${GOMEMLIMIT:-320MiB}"
 
-set -- --config=/etc/otelcol/config.yaml
-if [ -n "${OTEL_SECONDARY_ENDPOINT:-}" ]; then
-  export OTEL_SECONDARY_AUTHORIZATION="${OTEL_SECONDARY_AUTHORIZATION:-}"
-  set -- "$@" --config=/etc/otelcol/secondary.yaml
-fi
-
-exec /usr/local/bin/otelcol "$@"
+exec /usr/local/bin/otelcol --config=/etc/otelcol/config.yaml

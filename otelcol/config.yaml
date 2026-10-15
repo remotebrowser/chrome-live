@@ -2,8 +2,7 @@
 #
 # Both browser-trace processes (cdp + tinyproxy) export OTLP/HTTP to
 # 127.0.0.1:4318 when OTEL_COLLECTOR_ENABLED=true; this collector owns the
-# hop to Logfire (batching, retries, on-disk queue). Dual write is layered on
-# by merging `secondary.yaml` — see the otelcol s6 run script.
+# hop to Logfire (batching, retries, on-disk queue).
 #
 # Do not add processors that rewrite `logfire.*` attributes
 # (logfire.msg_template, logfire.span_type, …) — the Logfire UI relies on them.
