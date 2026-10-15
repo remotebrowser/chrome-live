@@ -32,38 +32,47 @@ CDP_HOST=127.0.0.1
 CDP_PORT=9222
 ```
 
-| Key                     | Description                                                                                                                                                                                                                                                                                                                 | Required |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `SERVICE_NAME`          | Service name reported to Logfire (default: `browser-trace`)                                                                                                                                                                                                                                                                 | No       |
-| `LOGFIRE_TOKEN`         | Logfire write token for sending telemetry                                                                                                                                                                                                                                                                                   | No       |
-| `LOGFIRE_TRACEPARENT`   | W3C traceparent to attach events to a parent trace                                                                                                                                                                                                                                                                          | No       |
-| `LOG_LEVEL`             | Minimum severity gate for both the Fly-logs tee **and** Logfire emission (passed through to `logfire.configure(min_level=...)`). Default `INFO` drops tinyproxy `CONNECT` / `INFO` (mapped to `logfire.debug`) from both sinks; set `DEBUG` to surface them. Accepted: `DEBUG`, `INFO`, `NOTICE`, `WARN`, `ERROR`, `FATAL`. | No       |
-| `CDP_HOST`              | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
-| `CDP_PORT`              | Chrome DevTools Protocol port (default: `9222`)                                                                                                                                                                                                                                                                             | No       |
-| `RECORDING_DIR`         | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
-| `EVENT_LOG_PATH`        | JSONL file containing every application log record, served by `GET /logs` (default: `/tmp/browser-trace-logs.jsonl`)                                                                                                                                                                                                         | No       |
+| Key                   | Description                                                                                                                                                                                                                                                                                                                 | Required |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `SERVICE_NAME`        | Service name reported to Logfire (default: `browser-trace`)                                                                                                                                                                                                                                                                 | No       |
+| `LOGFIRE_TOKEN`       | Logfire write token for sending telemetry                                                                                                                                                                                                                                                                                   | No       |
+| `LOGFIRE_TRACEPARENT` | W3C traceparent to attach events to a parent trace                                                                                                                                                                                                                                                                          | No       |
+| `LOG_LEVEL`           | Minimum severity gate for both the Fly-logs tee **and** Logfire emission (passed through to `logfire.configure(min_level=...)`). Default `INFO` drops tinyproxy `CONNECT` / `INFO` (mapped to `logfire.debug`) from both sinks; set `DEBUG` to surface them. Accepted: `DEBUG`, `INFO`, `NOTICE`, `WARN`, `ERROR`, `FATAL`. | No       |
+| `CDP_HOST`            | Chrome DevTools Protocol host (default: `127.0.0.1`)                                                                                                                                                                                                                                                                        | No       |
+| `CDP_PORT`            | Chrome DevTools Protocol port (default: `9222`)                                                                                                                                                                                                                                                                             | No       |
+| `RECORDING_DIR`       | Directory for recordings (default: `/tmp/recordings`)                                                                                                                                                                                                                                                                       | No       |
+| `EVENT_LOG_PATH`      | JSONL file containing every application log record, served by `GET /logs` (default: `/tmp/browser-trace-logs.jsonl`)                                                                                                                                                                                                        | No       |
 
-The config file is watched for changes every second, so `LOGFIRE_TRACEPARENT` can be updated at runtime without restarting the service.
+browser-trace checks the config file for changes every second. You can change `LOGFIRE_TRACEPARENT` without restarting the service.
 
 ## OpenTelemetry Collector
 
-In the container image, browser-trace doesn't send to Logfire directly. It goes through an `otelcol-contrib` sidecar (s6 service `otelcol`, config in [`otelcol/`](../otelcol)):
+Inside the container, browser-trace does not send data to Logfire directly. It sends data to a local **OpenTelemetry Collector** (`otelcol`). The collector then sends the data to Logfire.
 
 ```
-browser-trace (cdp)      ─┐ OTLP/HTTP 127.0.0.1:4318
-browser-trace tinyproxy  ─┴──────────────► otelcol ──► Logfire (disk-backed queue + retry)
+browser-trace (cdp)       ─┐
+                           ├──► otelcol (127.0.0.1:4318) ──► Logfire
+browser-trace (tinyproxy) ─┘
 ```
 
-When `LOGFIRE_TOKEN` is set, the s6 run scripts export `OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318`. The Logfire SDK then exports to the collector, and `main.py` turns off the SDK's direct Logfire export, so each record is sent only once. Records carry the resource attribute `telemetry.pipeline=otelcol`. Without a token, the collector stays idle and nothing is sent, same as before.
+Why use a collector:
 
-The collector reads these container env vars through the `otelcol` s6 service, not the config file:
+- **No data loss in short outages.** If Logfire is down, the collector saves data to disk (`/var/lib/otelcol/queue`) and retries for up to 10 minutes.
+- **Easy to change later.** To add or change a backend, edit [`otelcol/config.yaml`](../otelcol/config.yaml). You don't need to change the app.
 
-| Env var            | Description                                                                                                           |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `LOGFIRE_TOKEN`    | Logfire write token. Setting it turns on the collector and export.                                                     |
-| `LOGFIRE_BASE_URL` | Logfire ingest URL override. Default: picked from the token's region prefix (`…_eu_…` → `https://logfire-eu.pydantic.dev`, otherwise `https://logfire-us.pydantic.dev`). |
+How it works:
 
-If Logfire is unreachable, the collector keeps data in a disk-backed queue (`/var/lib/otelcol/queue`) and retries for up to 10 minutes. Logfire spans that are still in progress don't appear while routed through the collector. That doesn't matter here, because browser-trace only emits log records. Running browser-trace outside the image (e.g. `uv run main.py`) still exports to Logfire directly.
+- **With `LOGFIRE_TOKEN` set:** the collector starts, and browser-trace sends all data to it. Each record is sent only once.
+- **Without `LOGFIRE_TOKEN`:** the collector does nothing, and no data is sent. This is the same as before.
+- Every record has the attribute `telemetry.pipeline=otelcol`. Use it in Logfire to find data that came through the collector.
+- If you run browser-trace outside the container (for example, `uv run main.py`), it still sends data directly to Logfire.
+
+Settings (container environment variables):
+
+| Variable           | Description                                                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LOGFIRE_TOKEN`    | Logfire write token. If it is set, the collector runs.                                                                                                                                                  |
+| `LOGFIRE_BASE_URL` | Optional. The Logfire URL to send data to. By default, it comes from the token: EU tokens (`pylf_v1_eu_…`) use `https://logfire-eu.pydantic.dev`, and all others use `https://logfire-us.pydantic.dev`. |
 
 ## Usage
 
