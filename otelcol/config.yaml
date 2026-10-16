@@ -1,0 +1,23 @@
+# Host-level collector: receives OTLP from chrome-live containers and holds
+# the Logfire token, so the containers need no credentials.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  otlp_http/logfire:
+    endpoint: ${env:LOGFIRE_BASE_URL:-https://logfire-us.pydantic.dev}
+    headers:
+      Authorization: "Bearer ${env:LOGFIRE_TOKEN}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http/logfire]
