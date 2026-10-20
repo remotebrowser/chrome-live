@@ -6,8 +6,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import logfire
-
 _DEFAULT_PATH = Path("/tmp/browser-trace-logs.jsonl")
 _HANDLER_MARKER = "browser_trace_handler"
 _path = _DEFAULT_PATH
@@ -61,10 +59,10 @@ def configure(
     logger: logging.Logger,
     *,
     path: Path | None,
-    logfire_level: int,
     stdout_level: int,
+    otel_handler: logging.Handler | None,
 ) -> None:
-    """Send every application record to JSONL, stdout, and Logfire."""
+    """Send every application record to JSONL, stdout, and OpenTelemetry."""
     global _path
     _path = path or _DEFAULT_PATH
     for handler in list(logger.handlers):
@@ -88,9 +86,6 @@ def configure(
     setattr(stdout_handler, _HANDLER_MARKER, True)
     logger.addHandler(stdout_handler)
 
-    logfire_handler = logfire.LogfireLoggingHandler(
-        level=logfire_level,
-        fallback=logging.NullHandler(),
-    )
-    setattr(logfire_handler, _HANDLER_MARKER, True)
-    logger.addHandler(logfire_handler)
+    if otel_handler is not None:
+        setattr(otel_handler, _HANDLER_MARKER, True)
+        logger.addHandler(otel_handler)
