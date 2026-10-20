@@ -78,7 +78,8 @@ the same CDP endpoint.
 ### CloakBrowser Pro
 
 Pass a [CloakBrowser Pro](https://github.com/CloakHQ/cloakbrowser) license key to download
-the latest Pro binary (Chromium 150+) instead of the free v146 build.
+the Pro binary instead of the free build. Both tiers track the newest CloakBrowser
+release (currently Chromium v154); Pro lifts the free tier's 1-concurrent-session cap.
 
 **Build time** (bakes Pro into the image):
 

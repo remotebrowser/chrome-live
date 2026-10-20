@@ -96,9 +96,15 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # Optional build arg: pass CLOAKBROWSER_LICENSE_KEY to bake in the Pro binary.
 # Runtime -e CLOAKBROWSER_LICENSE_KEY=... is handled by cont-init.d/01-cloakbrowser-license,
 # which reuses the venv kept below.
-ARG CLOAKBROWSER_PIP_VERSION=0.5.10
-ARG CLOAKBROWSER_VERSION=146.0.7680.177.5
+ARG CLOAKBROWSER_PIP_VERSION=0.6.3
 ARG CLOAKBROWSER_LICENSE_KEY
+# Left unpinned so both tiers track the newest build. CLOAKBROWSER_VERSION must stay
+# unset: it pins an exact version, and no Pro build exists below v154, so a pinned
+# install 404s on the Pro download endpoint.
+# Auto-update off instead -- that is what the pin was really buying (#48): it stops the
+# background update threads that segfault the interpreter at exit. An uncached binary
+# is still fetched, so the install below works.
+ENV CLOAKBROWSER_AUTO_UPDATE=false
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
       python3-venv libgl1 libgl1-mesa-dri && \
