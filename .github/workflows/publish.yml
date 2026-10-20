@@ -48,6 +48,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -59,6 +60,27 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      # Chrome is installed from the unpinned google-chrome-stable apt package, so
+      # its version is only known after the build. Read it from the pushed image.
+      - name: Tag immutable version
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+          CHROME_VERSION=$(docker run --rm --platform linux/amd64 --entrypoint google-chrome-stable \
+            "${IMAGE}@${DIGEST}" --version | grep -oE '[0-9]+(\.[0-9]+){3}')
+          if [ -z "$CHROME_VERSION" ]; then
+            echo "could not read Chrome version from image" >&2
+            exit 1
+          fi
+          TAG="${CHROME_VERSION}-${GITHUB_SHA::7}"
+          if docker buildx imagetools inspect "${IMAGE}:${TAG}" >/dev/null 2>&1; then
+            echo "::notice::${IMAGE}:${TAG} already exists; not overwriting"
+            exit 0
+          fi
+          docker buildx imagetools create -t "${IMAGE}:${TAG}" "${IMAGE}@${DIGEST}"
+          echo "Published \`${IMAGE}:${TAG}\`" >> "$GITHUB_STEP_SUMMARY"
 
   publish-fly:
     needs: publish
