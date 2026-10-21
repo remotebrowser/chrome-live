@@ -54,6 +54,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Same as publish.yml: the Dockerfile hard-fails an amd64 build without the
+      # tarball in the build context.
+      - name: Fetch custom-chromium tarball
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          curl -fsSL -o custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
+            https://github.com/remotebrowser/chrome-live/releases/download/custom-chromium-151.0.7922.71/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
+          curl -fsSL -o custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256 \
+            https://github.com/remotebrowser/chrome-live/releases/download/custom-chromium-151.0.7922.71/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256
+          echo "$(cat custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256)  custom-chromium-151.0.7922.71-release-linux-x64.tar.zst" | sha256sum -c -
+
       - name: Build and push Docker image
         if: github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v5
