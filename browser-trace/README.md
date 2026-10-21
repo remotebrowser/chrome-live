@@ -25,7 +25,7 @@ uv sync
 Create a config file (e.g. `.env`) with key=value pairs:
 
 ```
-SERVICE_NAME=browser-trace
+OTEL_SERVICE_NAME=browser-trace
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_EXPORTER_OTLP_HEADERS=authorization=secret
 TRACEPARENT=00-abc123...-01
@@ -35,7 +35,7 @@ CDP_PORT=9222
 
 | Key                     | Description                                                                                                                                                                                                                                                                                                                 | Required |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `SERVICE_NAME` | OTel `service.name` resource attribute (default: `browser-trace`) | No |
+| `OTEL_SERVICE_NAME` | OTel `service.name` resource attribute (default: `browser-trace`) | No |
 | `ENVIRONMENT` | OTel `deployment.environment.name` resource attribute (default: `local`) | No |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP/HTTP base URL; `/v1/logs` is appended. Export is off when empty | No |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Extra request headers as `key=value,key2=value2` | No |

@@ -67,7 +67,7 @@ class Config:
             pass
         tp = values.get("TRACEPARENT", "")
         return cls(
-            service_name=values.get("SERVICE_NAME", "browser-trace"),
+            service_name=values.get("OTEL_SERVICE_NAME", "browser-trace"),
             environment=values.get("ENVIRONMENT", "local"),
             otlp_endpoint=values.get("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
             otlp_headers=values.get("OTEL_EXPORTER_OTLP_HEADERS", ""),
