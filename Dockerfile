@@ -93,20 +93,31 @@ RUN apt-get update && apt-get install -y google-chrome-stable
 # image; the chromium s6 service picks which one to launch at runtime (default:
 # google-chrome-stable). CloakBrowser publishes no arm64 binary, so it stays
 # amd64-only; the TARGETARCH guard below keeps that step a no-op on arm64.
-ARG CLOAKBROWSER_PIP_VERSION=0.5.10
-ARG CLOAKBROWSER_VERSION=146.0.7680.177.5
+# Optional build arg: pass CLOAKBROWSER_LICENSE_KEY to bake in the Pro binary.
+# Runtime -e CLOAKBROWSER_LICENSE_KEY=... is handled by cont-init.d/01-cloakbrowser-license,
+# which reuses the venv kept below.
+ARG CLOAKBROWSER_PIP_VERSION=0.6.3
+ARG CLOAKBROWSER_LICENSE_KEY
+# Left unpinned so both tiers track the newest build. CLOAKBROWSER_VERSION must stay
+# unset: it pins an exact version, and no Pro build exists below v154, so a pinned
+# install 404s on the Pro download endpoint.
+# Auto-update off instead -- that is what the pin was really buying (#48): it stops the
+# background update threads that segfault the interpreter at exit. An uncached binary
+# is still fetched, so the install below works.
+ENV CLOAKBROWSER_AUTO_UPDATE=false
 RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       apt-get update -y && apt-get install -y --no-install-recommends \
       python3-venv libgl1 libgl1-mesa-dri && \
-      python3 -m venv /tmp/cloakbrowser-venv && \
-      /tmp/cloakbrowser-venv/bin/pip install "cloakbrowser==${CLOAKBROWSER_PIP_VERSION}" && \
-      /tmp/cloakbrowser-venv/bin/python -m cloakbrowser install && \
+      python3 -m venv /usr/local/lib/cloakbrowser-venv && \
+      /usr/local/lib/cloakbrowser-venv/bin/pip install "cloakbrowser==${CLOAKBROWSER_PIP_VERSION}" && \
+      CLOAKBROWSER_LICENSE_KEY="${CLOAKBROWSER_LICENSE_KEY}" \
+        /usr/local/lib/cloakbrowser-venv/bin/python -m cloakbrowser install && \
       CLOAK_DIR=$(find /root -name chrome -path '*cloakbrowser*' -type f 2>/dev/null | head -1 | xargs dirname) && \
       echo "CloakBrowser dir: ${CLOAK_DIR}" && \
       cp -r "${CLOAK_DIR}" /usr/local/lib/cloakbrowser && \
       chmod 755 /usr/local/lib/cloakbrowser/chrome && \
       ln -sf /usr/local/lib/cloakbrowser/chrome /usr/local/bin/cloak-browser && \
-      rm -rf /tmp/cloakbrowser-venv /var/lib/apt/lists/* ; \
+      rm -rf /var/lib/apt/lists/* ; \
     else \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
     fi
@@ -157,7 +168,7 @@ COPY hosts-to-filter.awk /tmp/hosts-to-filter.awk
 COPY chrome-policies.json /etc/opt/chrome/policies/managed/chrome-policies.json
 COPY root/ /
 
-RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
+RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /etc/cont-init.d/01-cloakbrowser-license /usr/local/bin/start-init.sh && \
     cp /usr/share/novnc/vnc_lite.html /usr/share/novnc/index.html && \
     sed -i 's/rfb.scaleViewport = readQueryVariable.*$/rfb.scaleViewport = true;/' /usr/share/novnc/index.html && \
     sed -i 's/<div id="top_bar">/<div id="top_bar" style="display:none;">/' /usr/share/novnc/index.html
