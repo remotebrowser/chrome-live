@@ -27,6 +27,8 @@ ARG TARGETARCH
 ARG S6_OVERLAY_VERSION=v3.2.2.0
 
 ENV DEBIAN_FRONTEND=noninteractive
+# Test image only: boot into Chromium. Overridden by `-e ACTIVE_BROWSER=...` or switch-browser.
+ENV ACTIVE_BROWSER=chromium
 
 RUN echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscf-eula select true" | debconf-set-selections
 
