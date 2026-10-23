@@ -111,26 +111,26 @@ RUN if [ "${TARGETARCH}" = "amd64" ]; then \
       echo "Skipping CloakBrowser install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
-# Install custom-chromium alongside Chrome/CloakBrowser. Source-patched Chromium
-# (see its RUNNING.md); the amd64 build, same arch as Chrome/CloakBrowser and as
-# the Daytona host, so no QEMU/multi-platform build needed. Bind-mount the
-# context instead of COPY so the file only needs to be present when it's
-# actually used. Required on amd64: fail loud rather than silently ship an
-# image missing custom-chrome.
-ARG CUSTOM_CHROMIUM_TARBALL=custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
-RUN --mount=type=bind,source=.,target=/ctx \
-    if [ "${TARGETARCH}" = "amd64" ] && [ -f "/ctx/${CUSTOM_CHROMIUM_TARBALL}" ]; then \
-      apt-get update -y && apt-get install -y --no-install-recommends zstd && \
-      mkdir -p /usr/local/lib/custom-chromium && \
-      tar --zstd -xf "/ctx/${CUSTOM_CHROMIUM_TARBALL}" --strip-components=1 -C /usr/local/lib/custom-chromium && \
-      chmod 755 /usr/local/lib/custom-chromium/chrome /usr/local/lib/custom-chromium/chrome-wrapper && \
-      ln -sf /usr/local/lib/custom-chromium/chrome-wrapper /usr/local/bin/custom-chrome && \
-      rm -rf /var/lib/apt/lists/* ; \
-    elif [ "${TARGETARCH}" = "amd64" ]; then \
-      echo "FATAL: ${CUSTOM_CHROMIUM_TARBALL} not found in build context (amd64 build requires it)" >&2 && \
-      exit 1 ; \
+# Install official Chromium alongside Chrome/CloakBrowser. Ubuntu's `chromium`
+# apt package is a snap shim (no snapd in a container), so pull the Chromium
+# project's own build from its snapshot bucket. Snapshots are tip-of-tree
+# builds of main, pinned by revision + sha256 for a reproducible image; bump
+# both together (latest revision: .../Linux_x64/LAST_CHANGE). Linux snapshots
+# are x64 only, so arm64 skips this step.
+ARG CHROMIUM_REVISION=1725235
+ARG CHROMIUM_SHA256=ed7a04cf714ed0089e71747fe9c370a14708d6556156eb355d74a91f5caf3010
+RUN if [ "${TARGETARCH}" = "amd64" ]; then \
+      apt-get update -y && apt-get install -y --no-install-recommends unzip && \
+      curl -fsSL -o /tmp/chrome-linux.zip \
+        "https://storage.googleapis.com/chromium-browser-snapshots/Linux_x64/${CHROMIUM_REVISION}/chrome-linux.zip" && \
+      echo "${CHROMIUM_SHA256}  /tmp/chrome-linux.zip" | sha256sum -c - && \
+      unzip -q /tmp/chrome-linux.zip -d /tmp && \
+      mv /tmp/chrome-linux /usr/local/lib/chromium && \
+      chmod 755 /usr/local/lib/chromium/chrome /usr/local/lib/chromium/chrome-wrapper && \
+      ln -sf /usr/local/lib/chromium/chrome-wrapper /usr/local/bin/chromium && \
+      rm -rf /tmp/chrome-linux.zip /var/lib/apt/lists/* ; \
     else \
-      echo "Skipping custom-chromium install on ${TARGETARCH} (amd64 only)" ; \
+      echo "Skipping Chromium install on ${TARGETARCH} (amd64 only)" ; \
     fi
 
 # Install s6-overlay

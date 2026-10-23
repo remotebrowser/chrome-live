@@ -23,18 +23,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # The custom-chromium tarball must be in the build context -- Dockerfile
-      # hard-fails an amd64 build without it. Pulled from this repo's own
-      # GitHub Release (public asset, no auth needed) rather than fetched
-      # live from wherever it's built.
-      - name: Fetch custom-chromium tarball
-        run: |
-          curl -fsSL -o custom-chromium-151.0.7922.71-release-linux-x64.tar.zst \
-            https://github.com/remotebrowser/chrome-live/releases/download/custom-chromium-151.0.7922.71/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst
-          curl -fsSL -o custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256 \
-            https://github.com/remotebrowser/chrome-live/releases/download/custom-chromium-151.0.7922.71/custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256
-          echo "$(cat custom-chromium-151.0.7922.71-release-linux-x64.tar.zst.sha256)  custom-chromium-151.0.7922.71-release-linux-x64.tar.zst" | sha256sum -c -
-
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
