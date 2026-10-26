@@ -4,8 +4,6 @@
 sed -i \
   -e "s|\${OTEL_SERVICE_NAME}|${OTEL_SERVICE_NAME:-browser-trace}|g" \
   -e "s|\${ENVIRONMENT}|${ENVIRONMENT:-local}|g" \
-  -e "s|\${OTEL_EXPORTER_OTLP_ENDPOINT}|${OTEL_EXPORTER_OTLP_ENDPOINT:-}|g" \
-  -e "s|\${OTEL_EXPORTER_OTLP_HEADERS}|${OTEL_EXPORTER_OTLP_HEADERS:-}|g" \
   -e "s|\${TRACEPARENT}|${TRACEPARENT:-}|g" \
   -e "s|\${LOG_LEVEL}|${LOG_LEVEL:-INFO}|g" \
   /app/browser-trace.conf
