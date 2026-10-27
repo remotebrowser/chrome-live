@@ -52,6 +52,20 @@ FLY_IP=$(fly ips list -a test-chrome-live --json | jq -r '.[] | select(.Type=="v
 curl http://$FLY_IP:9222/json/list
 ```
 
+## Telemetry (OTLP dual-write)
+
+browser-trace sends its logs to a local [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)
+on `127.0.0.1:4318`. The collector forwards every record to both backends (see `otelcol.yaml`):
+
+| Env var | Description |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Primary backend OTLP/HTTP base URL |
+| `OTEL_EXPORTER_OTLP_AUTHORIZATION` | Primary backend `Authorization` header value |
+| `OTEL_EXPORTER_OTLP_SECONDARY_ENDPOINT` | Secondary backend OTLP/HTTP base URL |
+| `OTEL_EXPORTER_OTLP_SECONDARY_AUTHORIZATION` | Secondary backend `Authorization` header value |
+
+All four are required; the collector does not start without them.
+
 ## Stealth browser (CloakBrowser / custom-chromium)
 
 The image ships [CloakBrowser](https://pypi.org/project/cloakbrowser/) — a stealth

@@ -145,12 +145,26 @@ RUN case "${TARGETARCH}" in \
     tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz && \
     rm -f /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-arch.tar.xz
 
+# Local OTel Collector (core distribution): browser-trace sends OTLP to it and it
+# dual-writes to both backends in otelcol.yaml.
+ARG OTELCOL_VERSION=0.162.0
+RUN case "${TARGETARCH}" in \
+      amd64) OTELCOL_SHA256="f99929987a915d3c6b2c9b15bc4938c5cea903a37a3f49e478024a0fa0772339" ;; \
+      arm64) OTELCOL_SHA256="6ae44683515ae0e561acbc9f2a0152dc98ef14ce89035417f95184cffd7cca12" ;; \
+      *) echo "Unsupported TARGETARCH: ${TARGETARCH}"; exit 1 ;; \
+    esac && \
+    curl -fsSL "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/otelcol_${OTELCOL_VERSION}_linux_${TARGETARCH}.tar.gz" -o /tmp/otelcol.tar.gz && \
+    echo "${OTELCOL_SHA256}  /tmp/otelcol.tar.gz" | sha256sum -c && \
+    tar -C /usr/local/bin -xzf /tmp/otelcol.tar.gz otelcol && \
+    rm -f /tmp/otelcol.tar.gz
+
 WORKDIR /app
 
 COPY entrypoint.sh /etc/cont-init.d/00-entrypoint.sh
 COPY start-init.sh /usr/local/bin/start-init.sh
 COPY tinyproxy.conf /app/tinyproxy.conf
 COPY browser-trace.conf /app/browser-trace.conf
+COPY otelcol.yaml /app/otelcol.yaml
 COPY allowlist.txt /tmp/allowlist.txt
 COPY denylist.txt /tmp/denylist.txt
 COPY hosts-to-filter.awk /tmp/hosts-to-filter.awk
