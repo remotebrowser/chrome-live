@@ -50,6 +50,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
     tar \
     tzdata \
     xz-utils \
+    unzip \
     gtk2-engines-murrine \
     dbus-x11 \
     novnc \
@@ -145,6 +146,21 @@ RUN case "${TARGETARCH}" in \
     tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz && \
     rm -f /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-arch.tar.xz
 
+# CapSolver captcha-solver extension, enabled at runtime only when CAPSOLVER_API_KEY
+# is set (see root/etc/cont-init.d/10-capsolver). The signing key is generated here
+# so the packed extension keeps one ID for the life of the image.
+# The upstream v1.17.1 asset is misnamed "v1.7.1"; its manifest says 1.17.1.
+ARG CAPSOLVER_VERSION=1.17.1
+ARG CAPSOLVER_ASSET=CapSolver.Browser.Extension-chrome-v1.7.1.zip
+ARG CAPSOLVER_SHA256=b5a65cc4c243f083aa65b8195d80c262969870d9c9dc40676f3df0c01c3b5480
+RUN curl -fsSL "https://github.com/capsolver/capsolver-browser-extension/releases/download/v${CAPSOLVER_VERSION}/${CAPSOLVER_ASSET}" -o /tmp/capsolver.zip && \
+    echo "${CAPSOLVER_SHA256}  /tmp/capsolver.zip" | sha256sum -c && \
+    unzip -q /tmp/capsolver.zip -d /opt/capsolver && \
+    test -f /opt/capsolver/assets/config.js && \
+    openssl genrsa -out /opt/capsolver.pem 2048 && \
+    chmod 0600 /opt/capsolver.pem && \
+    rm -f /tmp/capsolver.zip
+
 # Local OTel Collector (core distribution): browser-trace sends OTLP to it and it
 # dual-writes to both backends in otelcol.yaml.
 ARG OTELCOL_VERSION=0.162.0
@@ -171,7 +187,7 @@ COPY hosts-to-filter.awk /tmp/hosts-to-filter.awk
 COPY chrome-policies.json /etc/opt/chrome/policies/managed/chrome-policies.json
 COPY root/ /
 
-RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /usr/local/bin/start-init.sh && \
+RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /etc/cont-init.d/10-capsolver /usr/local/bin/start-init.sh && \
     cp /usr/share/novnc/vnc_lite.html /usr/share/novnc/index.html && \
     sed -i 's/rfb.scaleViewport = readQueryVariable.*$/rfb.scaleViewport = true;/' /usr/share/novnc/index.html && \
     sed -i 's/<div id="top_bar">/<div id="top_bar" style="display:none;">/' /usr/share/novnc/index.html
