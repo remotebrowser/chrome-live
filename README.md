@@ -89,6 +89,20 @@ switch-browser chrome   # switch back
 The choice persists in `/home/user/.active-browser` and the `chromium` service restarts on
 the same CDP endpoint.
 
+## CapSolver captcha solver
+
+The image ships the [CapSolver](https://github.com/capsolver/capsolver-browser-extension)
+extension. It is off by default. Set `CAPSOLVER_API_KEY` to turn it on in every browser
+(Chrome, CloakBrowser and custom-chrome):
+
+```
+docker run -p 7000:80 -e CAPSOLVER_API_KEY=CAP-XXXXXXXX chrome-live
+```
+
+The key is written into the extension's default config when the container starts. The
+extension saves its settings in the Chrome profile on first run, so to change the key on
+an existing profile, use the extension popup.
+
 ## Daytona backend
 
 The same image also runs on Daytona (a sandbox reached via a Daytona signed preview URL to
