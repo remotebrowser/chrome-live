@@ -37,7 +37,7 @@ if [ "$ACTIVE" = "custom" ] && ! command -v custom-chrome >/dev/null 2>&1; then
   ACTIVE=chrome
 fi
 
-# Prepared by /etc/cont-init.d/10-capsolver when CAPSOLVER_API_KEY is set. Google
+# Prepared by /etc/cont-init.d/10-capsolver.sh when CAPSOLVER_API_KEY is set. Google
 # Chrome ignores --load-extension and gets it from /usr/share/google-chrome/extensions,
 # which --disable-default-apps also turns off, so that flag is dropped in this case.
 if [ -d /home/user/capsolver ]; then

@@ -147,7 +147,7 @@ RUN case "${TARGETARCH}" in \
     rm -f /tmp/s6-overlay-noarch.tar.xz /tmp/s6-overlay-arch.tar.xz
 
 # CapSolver captcha-solver extension, enabled at runtime only when CAPSOLVER_API_KEY
-# is set (see root/etc/cont-init.d/10-capsolver). The signing key is generated here
+# is set (see root/etc/cont-init.d/10-capsolver.sh). The signing key is generated here
 # so the packed extension keeps one ID for the life of the image.
 # The upstream v1.17.1 asset is misnamed "v1.7.1"; its manifest says 1.17.1.
 ARG CAPSOLVER_VERSION=1.17.1
@@ -187,7 +187,7 @@ COPY hosts-to-filter.awk /tmp/hosts-to-filter.awk
 COPY chrome-policies.json /etc/opt/chrome/policies/managed/chrome-policies.json
 COPY root/ /
 
-RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /etc/cont-init.d/10-capsolver /usr/local/bin/start-init.sh && \
+RUN chmod +x /etc/cont-init.d/00-entrypoint.sh /etc/cont-init.d/10-capsolver.sh /usr/local/bin/start-init.sh && \
     cp /usr/share/novnc/vnc_lite.html /usr/share/novnc/index.html && \
     sed -i 's/rfb.scaleViewport = readQueryVariable.*$/rfb.scaleViewport = true;/' /usr/share/novnc/index.html && \
     sed -i 's/<div id="top_bar">/<div id="top_bar" style="display:none;">/' /usr/share/novnc/index.html
